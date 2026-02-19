@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from google.cloud import bigquery
 from jinja2 import Template
 from weasyprint import HTML
 
@@ -39,10 +40,30 @@ def load_sql(project_id: str, dataset_id: str) -> str:
 
 
 def query_company_metrics(project_id: str, dataset_id: str) -> list[dict[str, Any]]:
-    client = bigquery.Client(project=project_id)
     sql = load_sql(project_id=project_id, dataset_id=dataset_id)
-    rows = client.query(sql).result()
-    return [dict(row.items()) for row in rows]
+    cmd = [
+        "bq",
+        "query",
+        "--project_id",
+        project_id,
+        "--use_legacy_sql=false",
+        "--format=prettyjson",
+        sql,
+    ]
+
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"bq query failed: {result.stderr.strip()}")
+
+    payload = result.stdout.strip()
+    if not payload:
+        return []
+
+    data = json.loads(payload)
+    if isinstance(data, list):
+        return [dict(row) for row in data]
+
+    raise RuntimeError("Unexpected bq output format. Expected JSON array.")
 
 
 def score_company(row: dict[str, Any]) -> AiAssessment:
