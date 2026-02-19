@@ -48,13 +48,14 @@ def query_company_metrics(project_id: str, dataset_id: str) -> list[dict[str, An
         project_id,
         "--use_legacy_sql=false",
         "--format=prettyjson",
-        "--",
-        sql,
     ]
 
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    result = subprocess.run(cmd, input=sql, check=False, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(f"bq query failed: {result.stderr.strip()}")
+        stderr = result.stderr.strip()
+        stdout = result.stdout.strip()
+        detail = stderr or stdout or "No output from bq CLI"
+        raise RuntimeError(f"bq query failed (exit {result.returncode}): {detail}")
 
     payload = result.stdout.strip()
     if not payload:
