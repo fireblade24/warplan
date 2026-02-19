@@ -28,7 +28,7 @@ Then an AI scoring layer adds:
 
 Assuming your environment already has dependencies installed, the `bq` CLI is available/authenticated, and BigQuery env vars are set (`BQ_PROJECT_ID`, `BQ_DATASET_ID`).
 
-Note: `pandas` and `google-cloud-bigquery` are **not required** anymore for this script.
+Note: `pandas`, `google-cloud-bigquery`, and `jinja2` are **not required** anymore for this script.
 
 ```bash
 python src/quality_edgar_vendor_report.py

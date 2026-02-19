@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
 import json
 import os
 import subprocess
@@ -18,7 +19,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Template
 from weasyprint import HTML
 
 QES_NAME = "QUALITY EDGAR SOLUTIONS"
@@ -133,30 +133,63 @@ def _display_value(value: Any) -> str:
 
 
 def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
-    template = Template(
-        """
+    table_rows = []
+    for row in rows:
+        company_name = html.escape(_display_value(row.get("companyName")))
+        company_cik = html.escape(_display_value(row.get("companyCIK")))
+        total_filings = html.escape(_display_value(row.get("total_filings")))
+        qes_filings = html.escape(_display_value(row.get("qes_filings")))
+        qes_percentage = html.escape(_display_value(row.get("qes_percentage")))
+        dominant_filer = "Yes" if row.get("is_qes_dominant_filer") else "No"
+        other_agents_count = html.escape(_display_value(row.get("other_agents_count")))
+        qes_vendor_since = html.escape(_display_value(row.get("qes_vendor_since")))
+        qes_last_filing_date = html.escape(_display_value(row.get("qes_last_filing_date")))
+        qes_last_form_type = html.escape(_display_value(row.get("qes_last_form_type")))
+        money_rank = html.escape(_display_value(row.get("money_rank")))
+        switch_rank = html.escape(_display_value(row.get("switch_rank")))
+        ai_reasoning = html.escape(_display_value(row.get("ai_reasoning")))
+
+        table_rows.append(
+            "<tr>"
+            f"<td>{company_name}</td>"
+            f"<td>{company_cik}</td>"
+            f"<td>{total_filings}</td>"
+            f"<td>{qes_filings}</td>"
+            f"<td>{qes_percentage}%</td>"
+            f"<td>{dominant_filer}</td>"
+            f"<td>{other_agents_count}</td>"
+            f"<td>{qes_vendor_since}</td>"
+            f"<td>{qes_last_filing_date}</td>"
+            f"<td>{qes_last_form_type}</td>"
+            f"<td>{money_rank}</td>"
+            f"<td>{switch_rank}</td>"
+            f"<td>{ai_reasoning}</td>"
+            "</tr>"
+        )
+
+    html_string = f"""
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <style>
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #111; }
-    h1 { font-size: 20px; margin-bottom: 4px; }
-    h2 { font-size: 13px; margin-top: 0; color: #444; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th, td {
+    body {{ font-family: Arial, sans-serif; font-size: 11px; color: #111; }}
+    h1 {{ font-size: 20px; margin-bottom: 4px; }}
+    h2 {{ font-size: 13px; margin-top: 0; color: #444; }}
+    table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
+    th, td {{
       border: 1px solid #d7d7d7;
       padding: 6px;
       vertical-align: top;
       word-wrap: break-word;
-    }
-    th { background: #f4f4f4; }
-    .small { color: #666; font-size: 10px; }
+    }}
+    th {{ background: #f4f4f4; }}
+    .small {{ color: #666; font-size: 10px; }}
   </style>
 </head>
 <body>
-  <h1>{{ vendor }} Client Opportunity Report</h1>
-  <h2>One row per company using {{ vendor }}</h2>
+  <h1>{html.escape(QES_NAME)} Client Opportunity Report</h1>
+  <h2>One row per company using {html.escape(QES_NAME)}</h2>
   <p class="small">Generated automatically from BigQuery + AI scoring.</p>
   <table>
     <thead>
@@ -164,8 +197,8 @@ def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
         <th>Company</th>
         <th>CIK</th>
         <th>Total Filings</th>
-        <th>{{ vendor }} Filings</th>
-        <th>{{ vendor }} %</th>
+        <th>{html.escape(QES_NAME)} Filings</th>
+        <th>{html.escape(QES_NAME)} %</th>
         <th>Dominant Filer?</th>
         <th>Other Agents</th>
         <th>Vendor Since</th>
@@ -177,37 +210,15 @@ def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
       </tr>
     </thead>
     <tbody>
-    {% for row in rows %}
-      <tr>
-        <td>{{ row.companyName }}</td>
-        <td>{{ row.companyCIK }}</td>
-        <td>{{ row.total_filings }}</td>
-        <td>{{ row.qes_filings }}</td>
-        <td>{{ row.qes_percentage }}%</td>
-        <td>{{ "Yes" if row.is_qes_dominant_filer else "No" }}</td>
-        <td>{{ row.other_agents_count }}</td>
-        <td>{{ row.qes_vendor_since }}</td>
-        <td>{{ row.qes_last_filing_date }}</td>
-        <td>{{ row.qes_last_form_type }}</td>
-        <td>{{ row.money_rank }}</td>
-        <td>{{ row.switch_rank }}</td>
-        <td>{{ row.ai_reasoning }}</td>
-      </tr>
-    {% endfor %}
+      {''.join(table_rows)}
     </tbody>
   </table>
 </body>
 </html>
-        """
-    )
+    """
 
-    printable_rows = [
-        {k: _display_value(v) for k, v in row.items()}
-        for row in rows
-    ]
-    html = template.render(vendor=QES_NAME, rows=printable_rows)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    HTML(string=html).write_pdf(str(output_path))
+    HTML(string=html_string).write_pdf(str(output_path))
 
 
 def write_csv(rows: list[dict[str, Any]], output_path: Path) -> None:
