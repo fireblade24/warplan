@@ -2,7 +2,7 @@
 
 ## QUALITY EDGAR SOLUTIONS vendor report
 
-This repo includes a new report pipeline that builds a one-row-per-company PDF and CSV for companies that have used `QUALITY EDGAR SOLUTIONS` as a filing agent.
+This repo includes a one-row-per-company report pipeline for companies that have used `QUALITY EDGAR SOLUTIONS` as a filing agent.
 
 ### What it produces
 
@@ -22,15 +22,23 @@ Then an AI scoring layer adds:
 ### Files
 
 - SQL logic: `sql/quality_edgar_vendor_report.sql`
-- Report generator (BigQuery + AI scoring + WeasyPrint): `reports/quality_edgar_vendor_report.py`
+- Job runner (BigQuery + AI scoring + WeasyPrint): `src/quality_edgar_vendor_report.py`
 
-### Run
+### Run (same style as prior project)
+
+Assuming your environment already has dependencies installed and BigQuery env vars set (`BQ_PROJECT_ID`, `BQ_DATASET_ID`):
 
 ```bash
-pip install google-cloud-bigquery pandas jinja2 weasyprint
-python reports/quality_edgar_vendor_report.py \
+python src/quality_edgar_vendor_report.py
+```
+
+Optional explicit args:
+
+```bash
+python src/quality_edgar_vendor_report.py \
   --project-id <your-gcp-project> \
-  --dataset-id <your-bq-dataset>
+  --dataset-id <your-bq-dataset> \
+  --output output/quality_edgar_vendor_report.pdf
 ```
 
 Outputs:
