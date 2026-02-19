@@ -39,6 +39,24 @@ def load_sql(project_id: str, dataset_id: str) -> str:
     return sql.replace("@project_id", project_id).replace("@dataset_id", dataset_id)
 
 
+
+
+def _normalized(value: str | None) -> str:
+    return (value or "").strip()
+
+
+def _detect_default_project_id() -> str:
+    env_project = _normalized(os.getenv("GOOGLE_CLOUD_PROJECT"))
+    if env_project:
+        return env_project
+
+    cmd = ["gcloud", "config", "get-value", "project", "--quiet"]
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode == 0:
+        return _normalized(result.stdout)
+
+    return ""
+
 def query_company_metrics(project_id: str, dataset_id: str) -> list[dict[str, Any]]:
     sql = load_sql(project_id=project_id, dataset_id=dataset_id)
     cmd = [
@@ -248,10 +266,21 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.project_id or not args.dataset_id:
-        raise SystemExit("Both --project-id and --dataset-id (or env vars) are required.")
+    project_id = _normalized(args.project_id)
+    dataset_id = _normalized(args.dataset_id)
 
-    metrics_rows = query_company_metrics(project_id=args.project_id, dataset_id=args.dataset_id)
+    if not project_id:
+        project_id = _detect_default_project_id()
+
+    if not project_id:
+        raise SystemExit(
+            "BigQuery project is empty. Set --project-id, BQ_PROJECT_ID, or GOOGLE_CLOUD_PROJECT."
+        )
+
+    if not dataset_id:
+        raise SystemExit("BigQuery dataset is empty. Set --dataset-id or BQ_DATASET_ID.")
+
+    metrics_rows = query_company_metrics(project_id=project_id, dataset_id=dataset_id)
     report_rows = apply_ai_assessments(metrics_rows)
     render_pdf(report_rows, Path(args.output))
     csv_path = Path(args.output).with_suffix(".csv")
