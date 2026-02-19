@@ -9,7 +9,6 @@ WITH base AS (
     DATE(filingDate) AS filing_date
   FROM `@project_id.@dataset_id.fact_filing_enriched`
   WHERE companyName IS NOT NULL
-    AND companyCIK IS NOT NULL
     AND filing_agent_group IS NOT NULL
 ),
 qes_companies AS (
@@ -20,7 +19,10 @@ qes_companies AS (
 company_totals AS (
   SELECT
     b.companyName,
-    ANY_VALUE(b.companyCIK) AS companyCIK,
+    COALESCE(
+      ARRAY_AGG(b.companyCIK IGNORE NULLS ORDER BY b.filing_date DESC LIMIT 1)[SAFE_OFFSET(0)],
+      ""
+    ) AS companyCIK,
     COUNT(*) AS total_filings,
     COUNTIF(b.filing_agent_group = 'QUALITY EDGAR SOLUTIONS') AS qes_filings,
     SAFE_DIVIDE(

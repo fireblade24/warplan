@@ -210,6 +210,7 @@ def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
 <head>
   <meta charset="utf-8" />
   <style>
+    @page {{ size: Letter landscape; margin: 0.35in; }}
     body {{ font-family: Arial, sans-serif; font-size: 11px; color: #111; }}
     h1 {{ font-size: 20px; margin-bottom: 4px; }}
     h2 {{ font-size: 13px; margin-top: 0; color: #444; }}

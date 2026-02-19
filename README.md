@@ -2,7 +2,7 @@
 
 ## QUALITY EDGAR SOLUTIONS vendor report
 
-This repo includes a one-row-per-company report pipeline for companies that have used `QUALITY EDGAR SOLUTIONS` as a filing agent.
+This repo includes a one-row-per-company report pipeline for companies that have used `QUALITY EDGAR SOLUTIONS` as a filing agent. It includes every company with at least one QUALITY EDGAR SOLUTIONS filing, whether or not they are the dominant filer.
 
 ### What it produces
 
