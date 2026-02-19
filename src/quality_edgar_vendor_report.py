@@ -10,11 +10,12 @@ The script:
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-import pandas as pd
 from google.cloud import bigquery
 from jinja2 import Template
 from weasyprint import HTML
@@ -37,13 +38,14 @@ def load_sql(project_id: str, dataset_id: str) -> str:
     return sql.replace("@project_id", project_id).replace("@dataset_id", dataset_id)
 
 
-def query_company_metrics(project_id: str, dataset_id: str) -> pd.DataFrame:
+def query_company_metrics(project_id: str, dataset_id: str) -> list[dict[str, Any]]:
     client = bigquery.Client(project=project_id)
     sql = load_sql(project_id=project_id, dataset_id=dataset_id)
-    return client.query(sql).to_dataframe(create_bqstorage_client=False)
+    rows = client.query(sql).result()
+    return [dict(row.items()) for row in rows]
 
 
-def score_company(row: pd.Series) -> AiAssessment:
+def score_company(row: dict[str, Any]) -> AiAssessment:
     total = int(row["total_filings"])
     qes_pct = float(row["qes_percentage"])
     other_agents = int(row["other_agents_count"])
@@ -91,16 +93,25 @@ def score_company(row: pd.Series) -> AiAssessment:
     return AiAssessment(money_rank=money_rank, switch_rank=switch_rank, reasoning=reasoning)
 
 
-def apply_ai_assessments(df: pd.DataFrame) -> pd.DataFrame:
-    assessments = df.apply(score_company, axis=1)
-    df = df.copy()
-    df["money_rank"] = [a.money_rank for a in assessments]
-    df["switch_rank"] = [a.switch_rank for a in assessments]
-    df["ai_reasoning"] = [a.reasoning for a in assessments]
-    return df
+def apply_ai_assessments(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    enriched_rows: list[dict[str, Any]] = []
+    for row in rows:
+        scored = dict(row)
+        assessment = score_company(scored)
+        scored["money_rank"] = assessment.money_rank
+        scored["switch_rank"] = assessment.switch_rank
+        scored["ai_reasoning"] = assessment.reasoning
+        enriched_rows.append(scored)
+    return enriched_rows
 
 
-def render_pdf(df: pd.DataFrame, output_path: Path) -> None:
+def _display_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
     template = Template(
         """
 <!doctype html>
@@ -169,10 +180,27 @@ def render_pdf(df: pd.DataFrame, output_path: Path) -> None:
         """
     )
 
-    rows = df.fillna("").to_dict(orient="records")
-    html = template.render(vendor=QES_NAME, rows=rows)
+    printable_rows = [
+        {k: _display_value(v) for k, v in row.items()}
+        for row in rows
+    ]
+    html = template.render(vendor=QES_NAME, rows=printable_rows)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     HTML(string=html).write_pdf(str(output_path))
+
+
+def write_csv(rows: list[dict[str, Any]], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        output_path.write_text("", encoding="utf-8")
+        return
+
+    fieldnames = list(rows[0].keys())
+    with output_path.open("w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: _display_value(v) for k, v in row.items()})
 
 
 def main() -> None:
@@ -189,11 +217,11 @@ def main() -> None:
     if not args.project_id or not args.dataset_id:
         raise SystemExit("Both --project-id and --dataset-id (or env vars) are required.")
 
-    metrics_df = query_company_metrics(project_id=args.project_id, dataset_id=args.dataset_id)
-    report_df = apply_ai_assessments(metrics_df)
-    render_pdf(report_df, Path(args.output))
+    metrics_rows = query_company_metrics(project_id=args.project_id, dataset_id=args.dataset_id)
+    report_rows = apply_ai_assessments(metrics_rows)
+    render_pdf(report_rows, Path(args.output))
     csv_path = Path(args.output).with_suffix(".csv")
-    report_df.to_csv(csv_path, index=False)
+    write_csv(report_rows, csv_path)
 
     print(f"Created report: {args.output}")
     print(f"Created flat data: {csv_path}")
