@@ -45,19 +45,36 @@ def _normalized(value: str | None) -> str:
     return (value or "").strip()
 
 
+def _is_effective_value(value: str) -> bool:
+    lowered = value.strip().lower()
+    return bool(lowered) and lowered not in {"(unset)", "unset", "none", "null"}
+
+
 def _detect_default_project_id() -> str:
     env_project = _normalized(os.getenv("GOOGLE_CLOUD_PROJECT"))
-    if env_project:
+    if _is_effective_value(env_project):
         return env_project
 
     cmd = ["gcloud", "config", "get-value", "project", "--quiet"]
     result = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if result.returncode == 0:
-        return _normalized(result.stdout)
+        detected = _normalized(result.stdout)
+        if _is_effective_value(detected):
+            return detected
 
     return ""
 
+
 def query_company_metrics(project_id: str, dataset_id: str) -> list[dict[str, Any]]:
+    project_id = _normalized(project_id)
+    dataset_id = _normalized(dataset_id)
+    if not _is_effective_value(project_id):
+        raise RuntimeError(
+            "BigQuery project is empty. Set --project-id, BQ_PROJECT_ID, or GOOGLE_CLOUD_PROJECT."
+        )
+    if not _is_effective_value(dataset_id):
+        raise RuntimeError("BigQuery dataset is empty. Set --dataset-id or BQ_DATASET_ID.")
+
     sql = load_sql(project_id=project_id, dataset_id=dataset_id)
     cmd = [
         "bq",
@@ -269,15 +286,15 @@ def main() -> None:
     project_id = _normalized(args.project_id)
     dataset_id = _normalized(args.dataset_id)
 
-    if not project_id:
+    if not _is_effective_value(project_id):
         project_id = _detect_default_project_id()
 
-    if not project_id:
+    if not _is_effective_value(project_id):
         raise SystemExit(
             "BigQuery project is empty. Set --project-id, BQ_PROJECT_ID, or GOOGLE_CLOUD_PROJECT."
         )
 
-    if not dataset_id:
+    if not _is_effective_value(dataset_id):
         raise SystemExit("BigQuery dataset is empty. Set --dataset-id or BQ_DATASET_ID.")
 
     metrics_rows = query_company_metrics(project_id=project_id, dataset_id=dataset_id)

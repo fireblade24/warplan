@@ -26,7 +26,7 @@ Then an AI scoring layer adds:
 
 ### Run (same style as prior project)
 
-Assuming your environment already has dependencies installed and the `bq` CLI is available/authenticated. The script reads `BQ_PROJECT_ID` and `BQ_DATASET_ID`; if project is missing, it falls back to `GOOGLE_CLOUD_PROJECT` or `gcloud config get-value project`.
+Assuming your environment already has dependencies installed and the `bq` CLI is available/authenticated. The script reads `BQ_PROJECT_ID` and `BQ_DATASET_ID`; if project is missing, it falls back to `GOOGLE_CLOUD_PROJECT` or `gcloud config get-value project`. Empty placeholder values like `(unset)` are treated as missing.
 
 Note: `pandas`, `google-cloud-bigquery`, and `jinja2` are **not required** anymore for this script.
 
