@@ -6,7 +6,7 @@ WITH base AS (
     companyCIK,
     formType,
     filing_agent_group,
-    DATE(filedAt) AS filing_date
+    DATE(filingDate) AS filing_date
   FROM `@project_id.@dataset_id.fact_filing_enriched`
   WHERE companyName IS NOT NULL
     AND companyCIK IS NOT NULL
