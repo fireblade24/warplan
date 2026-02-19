@@ -48,6 +48,7 @@ def query_company_metrics(project_id: str, dataset_id: str) -> list[dict[str, An
         project_id,
         "--use_legacy_sql=false",
         "--format=prettyjson",
+        "--",
         sql,
     ]
 
