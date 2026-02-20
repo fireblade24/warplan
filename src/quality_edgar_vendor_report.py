@@ -83,6 +83,7 @@ def query_company_metrics(project_id: str, dataset_id: str) -> list[dict[str, An
         project_id,
         "--use_legacy_sql=false",
         "--format=prettyjson",
+        "--max_rows=1000000",
     ]
 
     result = subprocess.run(cmd, input=sql, check=False, capture_output=True, text=True)

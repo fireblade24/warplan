@@ -6,6 +6,7 @@ WITH base AS (
     companyCIK,
     formType,
     filing_agent_group,
+    UPPER(TRIM(filing_agent_group)) AS filing_agent_group_normalized,
     DATE(filingDate) AS filing_date
   FROM `@project_id.@dataset_id.fact_filing_enriched`
   WHERE companyName IS NOT NULL
@@ -14,7 +15,7 @@ WITH base AS (
 qes_companies AS (
   SELECT DISTINCT companyName
   FROM base
-  WHERE filing_agent_group = 'QUALITY EDGAR SOLUTIONS'
+  WHERE filing_agent_group_normalized = 'QUALITY EDGAR SOLUTIONS'
 ),
 company_totals AS (
   SELECT
@@ -24,12 +25,12 @@ company_totals AS (
       ""
     ) AS companyCIK,
     COUNT(*) AS total_filings,
-    COUNTIF(b.filing_agent_group = 'QUALITY EDGAR SOLUTIONS') AS qes_filings,
+    COUNTIF(b.filing_agent_group_normalized = 'QUALITY EDGAR SOLUTIONS') AS qes_filings,
     SAFE_DIVIDE(
-      COUNTIF(b.filing_agent_group = 'QUALITY EDGAR SOLUTIONS'),
+      COUNTIF(b.filing_agent_group_normalized = 'QUALITY EDGAR SOLUTIONS'),
       COUNT(*)
     ) AS qes_percentage,
-    COUNT(DISTINCT IF(b.filing_agent_group != 'QUALITY EDGAR SOLUTIONS', b.filing_agent_group, NULL)) AS other_agents_count
+    COUNT(DISTINCT IF(b.filing_agent_group_normalized != 'QUALITY EDGAR SOLUTIONS', b.filing_agent_group, NULL)) AS other_agents_count
   FROM base b
   INNER JOIN qes_companies qc USING (companyName)
   GROUP BY b.companyName
@@ -60,7 +61,7 @@ qes_dates AS (
     MIN(b.filing_date) AS qes_vendor_since,
     MAX(b.filing_date) AS qes_last_filing_date
   FROM base b
-  WHERE b.filing_agent_group = 'QUALITY EDGAR SOLUTIONS'
+  WHERE b.filing_agent_group_normalized = 'QUALITY EDGAR SOLUTIONS'
   GROUP BY b.companyName
 ),
 qes_last_form AS (
@@ -68,7 +69,7 @@ qes_last_form AS (
     b.companyName,
     ARRAY_AGG(b.formType ORDER BY b.filing_date DESC LIMIT 1)[OFFSET(0)] AS qes_last_form_type
   FROM base b
-  WHERE b.filing_agent_group = 'QUALITY EDGAR SOLUTIONS'
+  WHERE b.filing_agent_group_normalized = 'QUALITY EDGAR SOLUTIONS'
   GROUP BY b.companyName
 )
 SELECT
@@ -81,7 +82,7 @@ SELECT
   qd.qes_vendor_since,
   qd.qes_last_filing_date,
   qlf.qes_last_form_type,
-  IF(ar.filing_agent_group = 'QUALITY EDGAR SOLUTIONS', TRUE, FALSE) AS is_qes_dominant_filer,
+  IF(UPPER(TRIM(ar.filing_agent_group)) = 'QUALITY EDGAR SOLUTIONS', TRUE, FALSE) AS is_qes_dominant_filer,
   ar.filing_agent_group AS top_agent_by_volume,
   ar.filings_by_agent AS top_agent_filing_count
 FROM company_totals ct

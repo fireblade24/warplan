@@ -10,6 +10,7 @@ For each company, the SQL output includes:
 - `companyName`, `companyCIK`
 - total filings, QUALITY EDGAR SOLUTIONS filings, and percentage share
 - whether QUALITY EDGAR SOLUTIONS is the dominant filer
+- matching for QUALITY EDGAR SOLUTIONS is normalized (trim + case-insensitive)
 - number of other filing agents used
 - when QUALITY EDGAR SOLUTIONS first filed (vendor since)
 - most recent filing date and last form type for QUALITY EDGAR SOLUTIONS
