@@ -57,14 +57,6 @@ agent_ranked AS (
     ) AS agent_rank
   FROM agent_breakout
 ),
-agent_summary AS (
-  SELECT
-    companyName,
-    MAX(IF(filing_agent_group_normalized = 'QUALITY EDGAR SOLUTIONS', filings_by_agent, 0)) AS qes_agent_filings,
-    MAX(IF(filing_agent_group_normalized != 'QUALITY EDGAR SOLUTIONS', filings_by_agent, 0)) AS max_other_agent_filings
-  FROM agent_breakout
-  GROUP BY companyName
-),
 qes_dates AS (
   SELECT
     b.companyName,
@@ -81,6 +73,23 @@ qes_last_form AS (
   FROM base b
   WHERE b.filing_agent_group_normalized = 'QUALITY EDGAR SOLUTIONS'
   GROUP BY b.companyName
+),
+
+qes_top_forms AS (
+  SELECT
+    companyName,
+    STRING_AGG(formType, ', ' ORDER BY form_count DESC, formType LIMIT 3) AS qes_top_3_form_types
+  FROM (
+    SELECT
+      b.companyName,
+      b.formType,
+      COUNT(*) AS form_count
+    FROM base b
+    WHERE b.filing_agent_group_normalized = 'QUALITY EDGAR SOLUTIONS'
+      AND b.formType IS NOT NULL
+    GROUP BY b.companyName, b.formType
+  )
+  GROUP BY companyName
 )
 SELECT
   ct.companyName,
@@ -100,13 +109,13 @@ SELECT
     'm'
   ) AS qes_service_length,
   qlf.qes_last_form_type,
-  IF(asum.qes_agent_filings > IFNULL(asum.max_other_agent_filings, 0), TRUE, FALSE) AS is_qes_dominant_filer,
+  qtf.qes_top_3_form_types,
   ar.filing_agent_group AS top_agent_by_volume,
   ar.filings_by_agent AS top_agent_filing_count
 FROM company_totals ct
 LEFT JOIN qes_dates qd USING (companyName)
 LEFT JOIN qes_last_form qlf USING (companyName)
-LEFT JOIN agent_summary asum USING (companyName)
+LEFT JOIN qes_top_forms qtf USING (companyName)
 LEFT JOIN agent_ranked ar
   ON ct.companyName = ar.companyName
  AND ar.agent_rank = 1

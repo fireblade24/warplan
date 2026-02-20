@@ -108,7 +108,7 @@ def score_company(row: dict[str, Any]) -> AiAssessment:
     total = int(row["total_filings"])
     qes_pct = float(row["qes_percentage"])
     other_agents = int(row["other_agents_count"])
-    dominant = bool(row["is_qes_dominant_filer"])
+    dominant = qes_pct > 85
     last_form = str(row.get("qes_last_form_type", "") or "")
 
     high_value_forms = {"S-1", "S-3", "10-K", "10-Q", "8-K", "DEF 14A", "424B"}
@@ -178,7 +178,7 @@ def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
         total_filings = html.escape(_display_value(row.get("total_filings")))
         qes_filings = html.escape(_display_value(row.get("qes_filings")))
         qes_percentage = html.escape(_display_value(row.get("qes_percentage")))
-        dominant_filer = "Yes" if row.get("is_qes_dominant_filer") else "No"
+        qes_top_3_form_types = html.escape(_display_value(row.get("qes_top_3_form_types")))
         other_agents_count = html.escape(_display_value(row.get("other_agents_count")))
         qes_vendor_since = html.escape(_display_value(row.get("qes_vendor_since")))
         qes_last_filing_date = html.escape(_display_value(row.get("qes_last_filing_date")))
@@ -195,7 +195,7 @@ def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
             f"<td>{total_filings}</td>"
             f"<td>{qes_filings}</td>"
             f"<td>{qes_percentage}%</td>"
-            f"<td>{dominant_filer}</td>"
+            f"<td>{qes_top_3_form_types}</td>"
             f"<td>{other_agents_count}</td>"
             f"<td>{qes_vendor_since}</td>"
             f"<td>{qes_last_filing_date}</td>"
@@ -240,7 +240,7 @@ def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
         <th>Total Filings</th>
         <th>{html.escape(QES_NAME)} Filings</th>
         <th>{html.escape(QES_NAME)} %</th>
-        <th>Dominant Filer?</th>
+        <th>Top 3 QES Form Types</th>
         <th>Other Agents</th>
         <th>Vendor Since</th>
         <th>Last Filing Date</th>
