@@ -20,7 +20,7 @@ company_totals AS (
   SELECT
     b.companyName,
     COALESCE(
-      ARRAY_AGG(b.companyCIK IGNORE NULLS ORDER BY b.filing_date DESC LIMIT 1)[SAFE_OFFSET(0)],
+      CAST(ARRAY_AGG(b.companyCIK IGNORE NULLS ORDER BY b.filing_date DESC LIMIT 1)[SAFE_OFFSET(0)] AS STRING),
       ""
     ) AS companyCIK,
     COUNT(*) AS total_filings,
