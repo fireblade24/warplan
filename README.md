@@ -9,7 +9,7 @@ This repo includes a one-row-per-company report pipeline for companies that have
 For each company, the SQL output includes:
 - `companyName`, `companyCIK`
 - total filings, QUALITY EDGAR SOLUTIONS filings, and percentage share
-- whether QUALITY EDGAR SOLUTIONS is the dominant filer
+- whether QUALITY EDGAR SOLUTIONS is the dominant filer (QES filing share > 85%)
 - matching for QUALITY EDGAR SOLUTIONS is normalized (trim + case-insensitive)
 - number of other filing agents used
 - when QUALITY EDGAR SOLUTIONS first filed (vendor since)
