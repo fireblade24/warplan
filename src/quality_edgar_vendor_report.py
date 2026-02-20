@@ -182,6 +182,7 @@ def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
         other_agents_count = html.escape(_display_value(row.get("other_agents_count")))
         qes_vendor_since = html.escape(_display_value(row.get("qes_vendor_since")))
         qes_last_filing_date = html.escape(_display_value(row.get("qes_last_filing_date")))
+        qes_service_length = html.escape(_display_value(row.get("qes_service_length")))
         qes_last_form_type = html.escape(_display_value(row.get("qes_last_form_type")))
         money_rank = html.escape(_display_value(row.get("money_rank")))
         switch_rank = html.escape(_display_value(row.get("switch_rank")))
@@ -198,6 +199,7 @@ def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
             f"<td>{other_agents_count}</td>"
             f"<td>{qes_vendor_since}</td>"
             f"<td>{qes_last_filing_date}</td>"
+            f"<td>{qes_service_length}</td>"
             f"<td>{qes_last_form_type}</td>"
             f"<td>{money_rank}</td>"
             f"<td>{switch_rank}</td>"
@@ -242,6 +244,7 @@ def render_pdf(rows: list[dict[str, Any]], output_path: Path) -> None:
         <th>Other Agents</th>
         <th>Vendor Since</th>
         <th>Last Filing Date</th>
+        <th>Service Length</th>
         <th>Last Form</th>
         <th>Revenue Rank</th>
         <th>Switch Likelihood</th>

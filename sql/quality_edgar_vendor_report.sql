@@ -39,21 +39,31 @@ agent_breakout AS (
   SELECT
     b.companyName,
     b.filing_agent_group,
+    b.filing_agent_group_normalized,
     COUNT(*) AS filings_by_agent
   FROM base b
   INNER JOIN qes_companies qc USING (companyName)
-  GROUP BY b.companyName, b.filing_agent_group
+  GROUP BY b.companyName, b.filing_agent_group, b.filing_agent_group_normalized
 ),
 agent_ranked AS (
   SELECT
     companyName,
     filing_agent_group,
+    filing_agent_group_normalized,
     filings_by_agent,
     ROW_NUMBER() OVER (
       PARTITION BY companyName
       ORDER BY filings_by_agent DESC, filing_agent_group
     ) AS agent_rank
   FROM agent_breakout
+),
+agent_summary AS (
+  SELECT
+    companyName,
+    MAX(IF(filing_agent_group_normalized = 'QUALITY EDGAR SOLUTIONS', filings_by_agent, 0)) AS qes_agent_filings,
+    MAX(IF(filing_agent_group_normalized != 'QUALITY EDGAR SOLUTIONS', filings_by_agent, 0)) AS max_other_agent_filings
+  FROM agent_breakout
+  GROUP BY companyName
 ),
 qes_dates AS (
   SELECT
@@ -81,13 +91,22 @@ SELECT
   ct.other_agents_count,
   qd.qes_vendor_since,
   qd.qes_last_filing_date,
+  DATE_DIFF(qd.qes_last_filing_date, qd.qes_vendor_since, MONTH) AS qes_service_months,
+  ROUND(SAFE_DIVIDE(DATE_DIFF(qd.qes_last_filing_date, qd.qes_vendor_since, MONTH), 12), 2) AS qes_service_years,
+  CONCAT(
+    CAST(DIV(DATE_DIFF(qd.qes_last_filing_date, qd.qes_vendor_since, MONTH), 12) AS STRING),
+    'y ',
+    CAST(MOD(DATE_DIFF(qd.qes_last_filing_date, qd.qes_vendor_since, MONTH), 12) AS STRING),
+    'm'
+  ) AS qes_service_length,
   qlf.qes_last_form_type,
-  IF(UPPER(TRIM(ar.filing_agent_group)) = 'QUALITY EDGAR SOLUTIONS', TRUE, FALSE) AS is_qes_dominant_filer,
+  IF(asum.qes_agent_filings > IFNULL(asum.max_other_agent_filings, 0), TRUE, FALSE) AS is_qes_dominant_filer,
   ar.filing_agent_group AS top_agent_by_volume,
   ar.filings_by_agent AS top_agent_filing_count
 FROM company_totals ct
 LEFT JOIN qes_dates qd USING (companyName)
 LEFT JOIN qes_last_form qlf USING (companyName)
+LEFT JOIN agent_summary asum USING (companyName)
 LEFT JOIN agent_ranked ar
   ON ct.companyName = ar.companyName
  AND ar.agent_rank = 1

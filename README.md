@@ -13,7 +13,8 @@ For each company, the SQL output includes:
 - matching for QUALITY EDGAR SOLUTIONS is normalized (trim + case-insensitive)
 - number of other filing agents used
 - when QUALITY EDGAR SOLUTIONS first filed (vendor since)
-- most recent filing date and last form type for QUALITY EDGAR SOLUTIONS
+- most recent filing date and service length (months/years) from first QES filing to last QES filing
+- last form type for QUALITY EDGAR SOLUTIONS
 
 Then an AI scoring layer adds:
 - money potential: `$`, `$$`, `$$$`, `$$$$`
