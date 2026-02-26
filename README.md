@@ -48,3 +48,35 @@ python src/quality_edgar_vendor_report.py \
 Outputs:
 - `output/quality_edgar_vendor_report.pdf`
 - `output/quality_edgar_vendor_report.csv`
+
+
+## NCEN Family Executive Report (new)
+
+Additional report using:
+- `sec-edgar-ralph.warplan.v_qes_filings_20250101_20260224_enriched`
+
+What it does:
+- one page per non-null `ncen_family_investment_company_name`
+- rolls up funds under each family
+- shows requested fund-level fields per family page
+- includes AI executive summary per family (openness to switch, potential value to EA, conversation script, reasoning)
+
+Files:
+- SQL logic: `sql/ncen_family_exec_report.sql`
+- Runner: `src/ncen_family_exec_report.py`
+
+Run:
+```bash
+python src/ncen_family_exec_report.py
+```
+
+Optional:
+```bash
+python src/ncen_family_exec_report.py \
+  --project-id <your-gcp-project> \
+  --output output/ncen_family_exec_report.pdf
+```
+
+Outputs:
+- `output/ncen_family_exec_report.pdf`
+- `output/ncen_family_exec_report.csv`
