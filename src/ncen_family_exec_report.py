@@ -231,7 +231,7 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
 <head>
   <meta charset=\"utf-8\" />
   <style>
-    @page {{ size: Letter landscape; margin: 0.35in; }}
+    @page {{ size: Letter portrait; margin: 0.35in; }}
     body {{ font-family: Arial, sans-serif; font-size: 10px; color: #1c1c1c; }}
     h1 {{ font-size: 22px; margin: 0 0 8px 0; border-bottom: 2px solid #0c4a6e; padding-bottom: 5px; }}
     h2 {{ font-size: 14px; margin: 8px 0 6px 0; color: #334155; }}
