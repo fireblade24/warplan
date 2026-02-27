@@ -196,19 +196,10 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
     # Front summary page
     qes_form_counts: dict[str, int] = {}
     family_lines = []
-    total_funds = len(rows)
-    ea_funds = sum(1 for r in rows if str(r.get("ever_filed_by_edgar_agents_llc_in_window", "")).lower() == "true")
-
     for fam_name in sorted(families.keys()):
         fam_rows = families[fam_name]
-        summary = summarize_family(fam_rows)
-        funds_in_family = len(fam_rows)
-        qes_funds_in_family = sum(1 for r in fam_rows if _to_int(r.get("qes_filings_in_window")) > 0)
-
         family_lines.append(
-            f"<li><b>{html.escape(fam_name)}</b> — {summary.tier} | Value {html.escape(summary.potential_value_to_ea)} | "
-            f"Switch {html.escape(summary.openness_to_switch)} | Total Funds: {funds_in_family} | "
-            f"Funds QES Works With: {qes_funds_in_family}</li>"
+            f"<li>{html.escape(fam_name)}</li>"
         )
 
         for r in fam_rows:
@@ -227,21 +218,17 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
                     qes_form_counts[form_type] = qes_form_counts.get(form_type, 0) + count_val
 
     form_items = [
-        f"<li><b>{html.escape(ft)}</b>: {cnt}</li>"
+        f"<li>{html.escape(ft)} ({cnt})</li>"
         for ft, cnt in sorted(qes_form_counts.items(), key=lambda x: (-x[1], x[0]))
     ]
 
     summary_page = f"""
-<section class=\"family-page\">
-  <h1>NCEN Executive Summary</h1>
-  <div class=\"summary\">
-    <p><b>Total Funds in Dataset:</b> {total_funds}</p>
-    <p><b>Funds EA Has Also Filed For:</b> {ea_funds}</p>
-  </div>
+<section class="family-page">
+  <h1>QES Filing Activity</h1>
   <h2>All QES Form Types Across Dataset (with filing counts)</h2>
-  <ul>{''.join(form_items) if form_items else '<li>No QES form types found.</li>'}</ul>
-  <h2>Family Priority List (AI Tiering)</h2>
-  <ul>{''.join(family_lines) if family_lines else '<li>No families found.</li>'}</ul>
+  <ul class="three-col">{''.join(form_items) if form_items else '<li>No QES form types found.</li>'}</ul>
+  <h2>Family List</h2>
+  <ul class="three-col">{''.join(family_lines) if family_lines else '<li>No families found.</li>'}</ul>
 </section>
 """
     pages.append(summary_page)
@@ -314,6 +301,7 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
     h3 {{ font-size: 12px; margin: 0 0 6px 0; color: #0f172a; }}
     ul {{ margin: 4px 0 10px 18px; }}
     li {{ margin: 2px 0; }}
+    .three-col {{ columns: 3; -webkit-columns: 3; -moz-columns: 3; column-gap: 20px; }}
     .family-page {{ page-break-after: always; }}
     .family-page:last-child {{ page-break-after: auto; }}
     .summary {{ background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; margin-bottom: 10px; }}
