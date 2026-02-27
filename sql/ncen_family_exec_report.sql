@@ -39,7 +39,8 @@ qes_fund_form_types AS (
   SELECT
     ncen_family_investment_company_name,
     companyCik,
-    STRING_AGG(formType, ', ' ORDER BY filings DESC, formType) AS qes_form_types_for_fund
+    STRING_AGG(formType, ', ' ORDER BY filings DESC, formType) AS qes_form_types_for_fund,
+    STRING_AGG(CONCAT(formType, '::', CAST(filings AS STRING)), '||' ORDER BY filings DESC, formType) AS qes_form_type_count_pairs
   FROM (
     SELECT
       ncen_family_investment_company_name,
@@ -69,7 +70,8 @@ SELECT
   lf.ever_filed_by_edgar_agents_llc_in_window,
   lf.total_agent_groups_used_in_window,
   lf.agent_groups_used_in_window,
-  fft.qes_form_types_for_fund
+  fft.qes_form_types_for_fund,
+  fft.qes_form_type_count_pairs
 FROM latest_fund lf
 LEFT JOIN qes_fund_form_types fft
   ON lf.ncen_family_investment_company_name = fft.ncen_family_investment_company_name

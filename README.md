@@ -56,11 +56,12 @@ Additional report using:
 - `sec-edgar-ralph.warplan.v_qes_filings_20250101_20260224_enriched`
 
 What it does:
+- front summary page with all QES form types + total filing counts across dataset, EA-overlap fund count, and AI-tiered family priority list
 - one page per non-null `ncen_family_investment_company_name`
 - rolls up funds under each family
 - shows requested fund-level fields in readable fund cards per family page (not a dense table)
 - includes QES form types filed for each fund
-- includes AI executive summary per family (openness to switch, potential value to EA, switch-likelihood reasoning, likely problems EA can solve, conversation script)
+- includes AI executive summary per family (tier, openness to switch, potential value to EA, switch-likelihood reasoning, likely problems EA can solve, conversation script)
 
 Files:
 - SQL logic: `sql/ncen_family_exec_report.sql`

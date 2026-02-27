@@ -27,7 +27,10 @@ class FamilyAiSummary:
     conversation_script: str
     switch_reasoning: str
     likely_problems_ea_can_solve: str
+    tier: str
 
+
+# ... helpers
 
 def _normalized(value: str | None) -> str:
     return (value or "").strip()
@@ -42,14 +45,12 @@ def _detect_default_project_id() -> str:
     env_project = _normalized(os.getenv("GOOGLE_CLOUD_PROJECT"))
     if _is_effective_value(env_project):
         return env_project
-
     cmd = ["gcloud", "config", "get-value", "project", "--quiet"]
     result = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if result.returncode == 0:
         detected = _normalized(result.stdout)
         if _is_effective_value(detected):
             return detected
-
     return ""
 
 
@@ -68,11 +69,9 @@ def query_rows(project_id: str) -> list[dict[str, Any]]:
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "No output from bq CLI"
         raise RuntimeError(f"bq query failed (exit {result.returncode}): {detail}")
-
     payload = result.stdout.strip()
     if not payload:
         return []
-
     data = json.loads(payload)
     if isinstance(data, list):
         return [dict(row) for row in data]
@@ -86,7 +85,11 @@ def _to_int(value: Any) -> int:
         return 0
 
 
-def summarize_family(rows: list[dict[str, Any]]) -> FamilyAiSummary:
+def _display(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _scoring_inputs(rows: list[dict[str, Any]]) -> tuple[int, int, float, float, int]:
     funds = len(rows)
     total_filings = sum(_to_int(r.get("total_filings_in_window")) for r in rows)
     qes_filings = sum(_to_int(r.get("qes_filings_in_window")) for r in rows)
@@ -94,11 +97,30 @@ def summarize_family(rows: list[dict[str, Any]]) -> FamilyAiSummary:
     avg_agent_count = (
         sum(_to_int(r.get("total_agent_groups_used_in_window")) for r in rows) / funds if funds else 0.0
     )
-    edgar_agents_llc_count = sum(1 for r in rows if str(r.get("ever_filed_by_edgar_agents_llc_in_window", "")).lower() == "true")
+    edgar_agents_llc_count = sum(
+        1 for r in rows if str(r.get("ever_filed_by_edgar_agents_llc_in_window", "")).lower() == "true"
+    )
+    return funds, total_filings, qes_share, avg_agent_count, edgar_agents_llc_count
+
+
+def _scores(rows: list[dict[str, Any]]) -> tuple[int, int]:
+    funds, total_filings, qes_share, avg_agent_count, edgar_agents_llc_count = _scoring_inputs(rows)
 
     value_score = 0
     value_score += 3 if total_filings >= 1000 else 2 if total_filings >= 300 else 1 if total_filings >= 100 else 0
     value_score += 2 if funds >= 10 else 1 if funds >= 4 else 0
+
+    switch_score = 0
+    switch_score += 3 if qes_share < 25 else 2 if qes_share < 50 else 1 if qes_share < 70 else 0
+    switch_score += 2 if avg_agent_count >= 4 else 1 if avg_agent_count >= 2 else 0
+    switch_score += 1 if edgar_agents_llc_count > 0 else 0
+
+    return value_score, switch_score
+
+
+def summarize_family(rows: list[dict[str, Any]]) -> FamilyAiSummary:
+    funds, total_filings, qes_share, avg_agent_count, edgar_agents_llc_count = _scoring_inputs(rows)
+    value_score, switch_score = _scores(rows)
 
     if value_score >= 5:
         potential_value = "$$$$"
@@ -108,11 +130,6 @@ def summarize_family(rows: list[dict[str, Any]]) -> FamilyAiSummary:
         potential_value = "$$"
     else:
         potential_value = "$"
-
-    switch_score = 0
-    switch_score += 3 if qes_share < 25 else 2 if qes_share < 50 else 1 if qes_share < 70 else 0
-    switch_score += 2 if avg_agent_count >= 4 else 1 if avg_agent_count >= 2 else 0
-    switch_score += 1 if edgar_agents_llc_count > 0 else 0
 
     if switch_score >= 5:
         openness = "Very High"
@@ -125,25 +142,34 @@ def summarize_family(rows: list[dict[str, Any]]) -> FamilyAiSummary:
     else:
         openness = "Very Low"
 
+    combined = value_score + switch_score
+    if combined >= 8:
+        tier = "Tier 1"
+    elif combined >= 6:
+        tier = "Tier 2"
+    elif combined >= 4:
+        tier = "Tier 3"
+    else:
+        tier = "Tier 4"
+
     switch_reasoning = (
-        f"QES share is {qes_share:.2f}% across {funds} funds; "
-        f"average agent groups used is {avg_agent_count:.2f}; "
-        f"{edgar_agents_llc_count} funds also used Edgar Agents LLC."
+        f"QES share is {qes_share:.2f}% across {funds} funds; average agent groups used is "
+        f"{avg_agent_count:.2f}; {edgar_agents_llc_count} funds also used Edgar Agents LLC."
     )
 
     likely_problems = []
     if avg_agent_count >= 3:
-        likely_problems.append("Fragmented vendor stack may cause handoff delays and inconsistent filing workflows")
+        likely_problems.append("Fragmented vendor stack may create handoff delays and inconsistent workflows")
     if qes_share < 40:
-        likely_problems.append("Low incumbent concentration suggests room to consolidate process ownership")
+        likely_problems.append("Low incumbent concentration suggests opportunity to consolidate accountability")
     if edgar_agents_llc_count > 0:
-        likely_problems.append("Evidence of competitive vendor usage indicates switching or split-book behavior")
+        likely_problems.append("Competitive vendor usage indicates split-book behavior and potential service gaps")
     if not likely_problems:
-        likely_problems.append("Opportunity to improve cycle-time predictability and operational reporting at family level")
+        likely_problems.append("Opportunity to improve cycle-time predictability and family-level reporting")
 
     conversation_script = (
         "We help fund families standardize filing operations across administrators and advisers. "
-        "Could we review one recent filing cycle to identify where we can reduce touches, "
+        "Could we review one recent filing cycle to pinpoint where we can reduce touches, "
         "improve turnaround consistency, and lower vendor-management overhead?"
     )
 
@@ -153,23 +179,72 @@ def summarize_family(rows: list[dict[str, Any]]) -> FamilyAiSummary:
         conversation_script=conversation_script,
         switch_reasoning=switch_reasoning,
         likely_problems_ea_can_solve="; ".join(likely_problems),
+        tier=tier,
     )
-
-
-def _display(value: Any) -> str:
-    return "" if value is None else str(value)
 
 
 def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str, Any]]:
     families: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         fam = _display(row.get("ncen_family_investment_company_name")).strip()
-        if not fam:
-            continue
-        families.setdefault(fam, []).append(row)
+        if fam:
+            families.setdefault(fam, []).append(row)
 
     pages = []
     flat_export: list[dict[str, Any]] = []
+
+    # Front summary page
+    qes_form_counts: dict[str, int] = {}
+    family_lines = []
+    total_funds = len(rows)
+    ea_funds = sum(1 for r in rows if str(r.get("ever_filed_by_edgar_agents_llc_in_window", "")).lower() == "true")
+
+    for fam_name in sorted(families.keys()):
+        fam_rows = families[fam_name]
+        summary = summarize_family(fam_rows)
+        funds_in_family = len(fam_rows)
+        qes_funds_in_family = sum(1 for r in fam_rows if _to_int(r.get("qes_filings_in_window")) > 0)
+
+        family_lines.append(
+            f"<li><b>{html.escape(fam_name)}</b> — {summary.tier} | Value {html.escape(summary.potential_value_to_ea)} | "
+            f"Switch {html.escape(summary.openness_to_switch)} | Total Funds: {funds_in_family} | "
+            f"Funds QES Works With: {qes_funds_in_family}</li>"
+        )
+
+        for r in fam_rows:
+            pairs = _display(r.get("qes_form_type_count_pairs"))
+            if not pairs:
+                continue
+            for part in pairs.split("||"):
+                if "::" not in part:
+                    continue
+                form_type, count_text = part.split("::", 1)
+                try:
+                    count_val = int(count_text)
+                except Exception:
+                    count_val = 0
+                if form_type:
+                    qes_form_counts[form_type] = qes_form_counts.get(form_type, 0) + count_val
+
+    form_items = [
+        f"<li><b>{html.escape(ft)}</b>: {cnt}</li>"
+        for ft, cnt in sorted(qes_form_counts.items(), key=lambda x: (-x[1], x[0]))
+    ]
+
+    summary_page = f"""
+<section class=\"family-page\">
+  <h1>NCEN Executive Summary</h1>
+  <div class=\"summary\">
+    <p><b>Total Funds in Dataset:</b> {total_funds}</p>
+    <p><b>Funds EA Has Also Filed For:</b> {ea_funds}</p>
+  </div>
+  <h2>All QES Form Types Across Dataset (with filing counts)</h2>
+  <ul>{''.join(form_items) if form_items else '<li>No QES form types found.</li>'}</ul>
+  <h2>Family Priority List (AI Tiering)</h2>
+  <ul>{''.join(family_lines) if family_lines else '<li>No families found.</li>'}</ul>
+</section>
+"""
+    pages.append(summary_page)
 
     for family_name in sorted(families.keys()):
         fund_rows = families[family_name]
@@ -201,6 +276,7 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
             )
 
             export_row = dict(r)
+            export_row["family_tier"] = summary.tier
             export_row["family_openness_to_switch"] = summary.openness_to_switch
             export_row["family_potential_value_to_ea"] = summary.potential_value_to_ea
             export_row["family_conversation_script"] = summary.conversation_script
@@ -210,7 +286,7 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
 
         page = f"""
 <section class=\"family-page\">
-  <h1>{html.escape(family_name)}</h1>
+  <h1>{html.escape(family_name)} ({html.escape(summary.tier)})</h1>
   <div class=\"summary\">
     <h2>AI Executive Summary</h2>
     <p><b>Openness to Switch:</b> {html.escape(summary.openness_to_switch)}</p>
@@ -236,6 +312,8 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
     h1 {{ font-size: 22px; margin: 0 0 8px 0; border-bottom: 2px solid #0c4a6e; padding-bottom: 5px; }}
     h2 {{ font-size: 14px; margin: 8px 0 6px 0; color: #334155; }}
     h3 {{ font-size: 12px; margin: 0 0 6px 0; color: #0f172a; }}
+    ul {{ margin: 4px 0 10px 18px; }}
+    li {{ margin: 2px 0; }}
     .family-page {{ page-break-after: always; }}
     .family-page:last-child {{ page-break-after: auto; }}
     .summary {{ background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; margin-bottom: 10px; }}
