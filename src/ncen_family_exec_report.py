@@ -25,7 +25,8 @@ class FamilyAiSummary:
     openness_to_switch: str
     potential_value_to_ea: str
     conversation_script: str
-    reasoning: str
+    switch_reasoning: str
+    likely_problems_ea_can_solve: str
 
 
 def _normalized(value: str | None) -> str:
@@ -78,13 +79,6 @@ def query_rows(project_id: str) -> list[dict[str, Any]]:
     raise RuntimeError("Unexpected bq output format. Expected JSON array.")
 
 
-def _to_float(value: Any) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return 0.0
-
-
 def _to_int(value: Any) -> int:
     try:
         return int(value)
@@ -100,6 +94,7 @@ def summarize_family(rows: list[dict[str, Any]]) -> FamilyAiSummary:
     avg_agent_count = (
         sum(_to_int(r.get("total_agent_groups_used_in_window")) for r in rows) / funds if funds else 0.0
     )
+    edgar_agents_llc_count = sum(1 for r in rows if str(r.get("ever_filed_by_edgar_agents_llc_in_window", "")).lower() == "true")
 
     value_score = 0
     value_score += 3 if total_filings >= 1000 else 2 if total_filings >= 300 else 1 if total_filings >= 100 else 0
@@ -117,6 +112,7 @@ def summarize_family(rows: list[dict[str, Any]]) -> FamilyAiSummary:
     switch_score = 0
     switch_score += 3 if qes_share < 25 else 2 if qes_share < 50 else 1 if qes_share < 70 else 0
     switch_score += 2 if avg_agent_count >= 4 else 1 if avg_agent_count >= 2 else 0
+    switch_score += 1 if edgar_agents_llc_count > 0 else 0
 
     if switch_score >= 5:
         openness = "Very High"
@@ -129,23 +125,34 @@ def summarize_family(rows: list[dict[str, Any]]) -> FamilyAiSummary:
     else:
         openness = "Very Low"
 
-    conversation_script = (
-        "We support multi-fund filing operations with predictable execution, "
-        "tight turnaround, and clean regulator-ready output. "
-        "Could we review one recent high-volume filing cycle and identify where "
-        "we can reduce touches and improve filing reliability across your funds?"
+    switch_reasoning = (
+        f"QES share is {qes_share:.2f}% across {funds} funds; "
+        f"average agent groups used is {avg_agent_count:.2f}; "
+        f"{edgar_agents_llc_count} funds also used Edgar Agents LLC."
     )
 
-    reasoning = (
-        f"Funds={funds}, total filings={total_filings}, QES share={qes_share:.2f}%, "
-        f"avg agent groups used={avg_agent_count:.2f}."
+    likely_problems = []
+    if avg_agent_count >= 3:
+        likely_problems.append("Fragmented vendor stack may cause handoff delays and inconsistent filing workflows")
+    if qes_share < 40:
+        likely_problems.append("Low incumbent concentration suggests room to consolidate process ownership")
+    if edgar_agents_llc_count > 0:
+        likely_problems.append("Evidence of competitive vendor usage indicates switching or split-book behavior")
+    if not likely_problems:
+        likely_problems.append("Opportunity to improve cycle-time predictability and operational reporting at family level")
+
+    conversation_script = (
+        "We help fund families standardize filing operations across administrators and advisers. "
+        "Could we review one recent filing cycle to identify where we can reduce touches, "
+        "improve turnaround consistency, and lower vendor-management overhead?"
     )
 
     return FamilyAiSummary(
         openness_to_switch=openness,
         potential_value_to_ea=potential_value,
         conversation_script=conversation_script,
-        reasoning=reasoning,
+        switch_reasoning=switch_reasoning,
+        likely_problems_ea_can_solve="; ".join(likely_problems),
     )
 
 
@@ -168,32 +175,37 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
         fund_rows = families[family_name]
         summary = summarize_family(fund_rows)
 
-        fund_table_rows = []
+        fund_cards = []
         for r in fund_rows:
-            fund_table_rows.append(
-                "<tr>"
-                f"<td>{html.escape(_display(r.get('companyName')))}</td>"
-                f"<td>{html.escape(_display(r.get('companyCik')))}</td>"
-                f"<td>{html.escape(_display(r.get('ncen_investment_company_type')))}</td>"
-                f"<td>{html.escape(_display(r.get('ncen_total_series')))}</td>"
-                f"<td>{html.escape(_display(r.get('ncen_accession_rows')))}</td>"
-                f"<td>{html.escape(_display(r.get('ncen_admin_names')))}</td>"
-                f"<td>{html.escape(_display(r.get('ncen_adviser_names')))}</td>"
-                f"<td>{html.escape(_display(r.get('ncen_adviser_types')))}</td>"
-                f"<td>{html.escape(_display(r.get('total_filings_in_window')))}</td>"
-                f"<td>{html.escape(_display(r.get('qes_filings_in_window')))}</td>"
-                f"<td>{html.escape(_display(r.get('qes_pct_of_company_filings_in_window')))}%</td>"
-                f"<td>{html.escape(_display(r.get('ever_filed_by_edgar_agents_llc_in_window')))}</td>"
-                f"<td>{html.escape(_display(r.get('total_agent_groups_used_in_window')))}</td>"
-                f"<td>{html.escape(_display(r.get('agent_groups_used_in_window')))}</td>"
-                "</tr>"
+            fund_cards.append(
+                f"""
+<div class=\"fund-card\">
+  <h3>{html.escape(_display(r.get('companyName')))} ({html.escape(_display(r.get('companyCik')))})</h3>
+  <div class=\"grid\">
+    <p><b>Investment Type:</b> {html.escape(_display(r.get('ncen_investment_company_type')))}</p>
+    <p><b>Total Series:</b> {html.escape(_display(r.get('ncen_total_series')))}</p>
+    <p><b>Accession Rows:</b> {html.escape(_display(r.get('ncen_accession_rows')))}</p>
+    <p><b>Total Filings (Window):</b> {html.escape(_display(r.get('total_filings_in_window')))}</p>
+    <p><b>QES Filings (Window):</b> {html.escape(_display(r.get('qes_filings_in_window')))}</p>
+    <p><b>QES % of Filings:</b> {html.escape(_display(r.get('qes_pct_of_company_filings_in_window')))}%</p>
+    <p><b>Filed by Edgar Agents LLC?</b> {html.escape(_display(r.get('ever_filed_by_edgar_agents_llc_in_window')))}</p>
+    <p><b>Total Agent Groups:</b> {html.escape(_display(r.get('total_agent_groups_used_in_window')))}</p>
+  </div>
+  <p><b>QES Form Types for Fund:</b> {html.escape(_display(r.get('qes_form_types_for_fund')))}</p>
+  <p><b>Admin Names:</b> {html.escape(_display(r.get('ncen_admin_names')))}</p>
+  <p><b>Adviser Names:</b> {html.escape(_display(r.get('ncen_adviser_names')))}</p>
+  <p><b>Adviser Types:</b> {html.escape(_display(r.get('ncen_adviser_types')))}</p>
+  <p><b>Agent Groups Used:</b> {html.escape(_display(r.get('agent_groups_used_in_window')))}</p>
+</div>
+"""
             )
 
             export_row = dict(r)
             export_row["family_openness_to_switch"] = summary.openness_to_switch
             export_row["family_potential_value_to_ea"] = summary.potential_value_to_ea
             export_row["family_conversation_script"] = summary.conversation_script
-            export_row["family_ai_reasoning"] = summary.reasoning
+            export_row["family_switch_reasoning"] = summary.switch_reasoning
+            export_row["family_likely_problems_ea_can_solve"] = summary.likely_problems_ea_can_solve
             flat_export.append(export_row)
 
         page = f"""
@@ -203,22 +215,12 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
     <h2>AI Executive Summary</h2>
     <p><b>Openness to Switch:</b> {html.escape(summary.openness_to_switch)}</p>
     <p><b>Potential Value to EA:</b> {html.escape(summary.potential_value_to_ea)}</p>
+    <p><b>Switch Likelihood Reasoning:</b> {html.escape(summary.switch_reasoning)}</p>
+    <p><b>Likely Problems EA Can Solve:</b> {html.escape(summary.likely_problems_ea_can_solve)}</p>
     <p><b>Conversation Starter Script:</b> {html.escape(summary.conversation_script)}</p>
-    <p><b>AI Reasoning:</b> {html.escape(summary.reasoning)}</p>
   </div>
   <h2>Funds in Family</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Fund</th><th>CIK</th><th>Investment Type</th><th>Total Series</th><th>Accession Rows</th>
-        <th>Admin Names</th><th>Adviser Names</th><th>Adviser Types</th><th>Total Filings</th>
-        <th>QES Filings</th><th>QES %</th><th>Filed by Edgar Agents LLC?</th><th>Total Agent Groups</th><th>Agent Groups Used</th>
-      </tr>
-    </thead>
-    <tbody>
-      {''.join(fund_table_rows)}
-    </tbody>
-  </table>
+  {''.join(fund_cards)}
 </section>
 """
         pages.append(page)
@@ -233,12 +235,13 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
     body {{ font-family: Arial, sans-serif; font-size: 10px; color: #1c1c1c; }}
     h1 {{ font-size: 22px; margin: 0 0 8px 0; border-bottom: 2px solid #0c4a6e; padding-bottom: 5px; }}
     h2 {{ font-size: 14px; margin: 8px 0 6px 0; color: #334155; }}
+    h3 {{ font-size: 12px; margin: 0 0 6px 0; color: #0f172a; }}
     .family-page {{ page-break-after: always; }}
     .family-page:last-child {{ page-break-after: auto; }}
-    .summary {{ background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px; margin-bottom: 10px; }}
-    table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
-    th, td {{ border: 1px solid #d1d5db; padding: 5px; vertical-align: top; word-wrap: break-word; }}
-    th {{ background: #e2e8f0; }}
+    .summary {{ background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; margin-bottom: 10px; }}
+    .fund-card {{ border: 1px solid #d1d5db; border-left: 4px solid #0c4a6e; padding: 8px; margin-bottom: 8px; background: #fff; }}
+    .fund-card p {{ margin: 2px 0; }}
+    .grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; }}
   </style>
 </head>
 <body>

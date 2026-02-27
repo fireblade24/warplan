@@ -58,8 +58,9 @@ Additional report using:
 What it does:
 - one page per non-null `ncen_family_investment_company_name`
 - rolls up funds under each family
-- shows requested fund-level fields per family page
-- includes AI executive summary per family (openness to switch, potential value to EA, conversation script, reasoning)
+- shows requested fund-level fields in readable fund cards per family page (not a dense table)
+- includes QES form types filed for each fund
+- includes AI executive summary per family (openness to switch, potential value to EA, switch-likelihood reasoning, likely problems EA can solve, conversation script)
 
 Files:
 - SQL logic: `sql/ncen_family_exec_report.sql`
