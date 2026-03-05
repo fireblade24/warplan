@@ -82,3 +82,38 @@ python src/ncen_family_exec_report.py \
 Outputs:
 - `output/ncen_family_exec_report.pdf`
 - `output/ncen_family_exec_report.csv`
+
+
+## NCEN Relationship Network Report (admin/adviser leverage)
+
+Additional report focused on relationship-based expansion paths using shared administrators and advisers.
+
+What it does:
+- rolls up registrants by **admin**
+- in a separate section, rolls up registrants by **adviser**
+- groups families by shared **admin + adviser** pairs
+- flags overlap where registrants show both EA (`ever_filed_by_edgar_agents_llc_in_window`) and QES (`qes_filings_in_window > 0`)
+- creates a leverage network section highlighting admins/advisers where EA+QES overlap exists and there are additional QES-only registrants to target
+
+Files:
+- SQL logic: `sql/ncen_relationship_network_report.sql`
+- Runner: `src/ncen_relationship_network_report.py`
+
+Run:
+```bash
+python src/ncen_relationship_network_report.py
+```
+
+Optional:
+```bash
+python src/ncen_relationship_network_report.py \
+  --project-id <your-gcp-project> \
+  --output output/ncen_relationship_network_report.pdf
+```
+
+Outputs:
+- `output/ncen_relationship_network_report.pdf`
+- `output/ncen_relationship_network_report_leverage_network.csv`
+- `output/ncen_relationship_network_report_by_admin.csv`
+- `output/ncen_relationship_network_report_by_adviser.csv`
+- `output/ncen_relationship_network_report_admin_adviser_pairs.csv`
