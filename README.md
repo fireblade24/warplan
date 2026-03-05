@@ -94,6 +94,7 @@ What it does:
 - groups families by shared **admin + adviser** pairs
 - flags overlap where registrants show both EA (`ever_filed_by_edgar_agents_llc_in_window`) and QES (`qes_filings_in_window > 0`)
 - creates a leverage network section highlighting admins/advisers where EA+QES overlap exists and there are additional QES-only registrants to target
+- includes family-name lists wherever applicable, including families QES files for and families EA files for
 
 Files:
 - SQL logic: `sql/ncen_relationship_network_report.sql`

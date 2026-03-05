@@ -13,8 +13,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from weasyprint import HTML
-
 ROOT = Path(__file__).resolve().parents[1]
 SQL_PATH = ROOT / "sql" / "ncen_relationship_network_report.sql"
 OUTPUT_DIR = ROOT / "output"
@@ -102,6 +100,9 @@ def _rollup_by_entity(rows: list[dict[str, Any]], key: str) -> list[dict[str, An
                     "ea_registrants": set(),
                     "qes_registrants": set(),
                     "both_registrants": set(),
+                    "ea_families": set(),
+                    "qes_families": set(),
+                    "both_families": set(),
                 },
             )
             if registrant:
@@ -114,6 +115,12 @@ def _rollup_by_entity(rows: list[dict[str, Any]], key: str) -> list[dict[str, An
                     slot["both_registrants"].add(registrant)
             if family:
                 slot["families"].add(family)
+                if uses_ea:
+                    slot["ea_families"].add(family)
+                if uses_qes:
+                    slot["qes_families"].add(family)
+                if uses_ea and uses_qes:
+                    slot["both_families"].add(family)
 
     out = []
     for item in acc.values():
@@ -125,7 +132,13 @@ def _rollup_by_entity(rows: list[dict[str, Any]], key: str) -> list[dict[str, An
                 "ea_registrant_count": len(item["ea_registrants"]),
                 "qes_registrant_count": len(item["qes_registrants"]),
                 "both_ea_qes_registrant_count": len(item["both_registrants"]),
+                "ea_family_count": len(item["ea_families"]),
+                "qes_family_count": len(item["qes_families"]),
+                "both_family_count": len(item["both_families"]),
                 "families": "; ".join(sorted(item["families"])),
+                "ea_families": "; ".join(sorted(item["ea_families"])),
+                "qes_families": "; ".join(sorted(item["qes_families"])),
+                "both_families": "; ".join(sorted(item["both_families"])),
             }
         )
     return sorted(
@@ -158,12 +171,21 @@ def _rollup_admin_adviser_pairs(rows: list[dict[str, Any]]) -> list[dict[str, An
                         "admin": admin,
                         "adviser": adviser,
                         "families": set(),
+                        "ea_families": set(),
+                        "qes_families": set(),
+                        "both_families": set(),
                         "registrants": set(),
                         "both_registrants": set(),
                     },
                 )
                 if family:
                     slot["families"].add(family)
+                    if uses_ea:
+                        slot["ea_families"].add(family)
+                    if uses_qes:
+                        slot["qes_families"].add(family)
+                    if uses_ea and uses_qes:
+                        slot["both_families"].add(family)
                 if registrant:
                     slot["registrants"].add(registrant)
                     if uses_ea and uses_qes:
@@ -176,9 +198,15 @@ def _rollup_admin_adviser_pairs(rows: list[dict[str, Any]]) -> list[dict[str, An
                 "admin": item["admin"],
                 "adviser": item["adviser"],
                 "family_count": len(item["families"]),
+                "ea_family_count": len(item["ea_families"]),
+                "qes_family_count": len(item["qes_families"]),
+                "both_family_count": len(item["both_families"]),
                 "registrant_count": len(item["registrants"]),
                 "both_ea_qes_registrant_count": len(item["both_registrants"]),
                 "families": "; ".join(sorted(item["families"])),
+                "ea_families": "; ".join(sorted(item["ea_families"])),
+                "qes_families": "; ".join(sorted(item["qes_families"])),
+                "both_families": "; ".join(sorted(item["both_families"])),
             }
         )
     return sorted(
@@ -213,6 +241,8 @@ def _build_leverage_candidates(admin_rollup: list[dict[str, Any]], adviser_rollu
                     "expandable_qes_only_registrants": max(qes_count - both_count, 0),
                     "family_count": row["family_count"],
                     "families": whitespace_safe_families,
+                    "ea_families": row.get("ea_families", ""),
+                    "qes_families": row.get("qes_families", ""),
                 }
             )
     return sorted(
@@ -237,13 +267,15 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
 
 
 def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, list[dict[str, Any]]]:
+    from weasyprint import HTML
+
     admin_rollup = _rollup_by_entity(rows, "ncen_admin_names")
     adviser_rollup = _rollup_by_entity(rows, "ncen_adviser_names")
     pair_rollup = _rollup_admin_adviser_pairs(rows)
     leverage = _build_leverage_candidates(admin_rollup, adviser_rollup)
 
     admin_table = _table(
-        ["Admin", "Registrants", "Families", "EA", "QES", "Both EA+QES"],
+        ["Admin", "Registrants", "Families", "EA", "QES", "Both EA+QES", "EA Family Names", "QES Family Names"],
         [
             [
                 r["entity"],
@@ -252,13 +284,15 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
                 str(r["ea_registrant_count"]),
                 str(r["qes_registrant_count"]),
                 str(r["both_ea_qes_registrant_count"]),
+                r["ea_families"],
+                r["qes_families"],
             ]
             for r in admin_rollup[:200]
         ],
     )
 
     adviser_table = _table(
-        ["Adviser", "Registrants", "Families", "EA", "QES", "Both EA+QES"],
+        ["Adviser", "Registrants", "Families", "EA", "QES", "Both EA+QES", "EA Family Names", "QES Family Names"],
         [
             [
                 r["entity"],
@@ -267,13 +301,15 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
                 str(r["ea_registrant_count"]),
                 str(r["qes_registrant_count"]),
                 str(r["both_ea_qes_registrant_count"]),
+                r["ea_families"],
+                r["qes_families"],
             ]
             for r in adviser_rollup[:200]
         ],
     )
 
     pair_table = _table(
-        ["Admin", "Adviser", "Families", "Registrants", "Both EA+QES"],
+        ["Admin", "Adviser", "Families", "Registrants", "Both EA+QES", "EA Family Names", "QES Family Names"],
         [
             [
                 r["admin"],
@@ -281,13 +317,15 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
                 str(r["family_count"]),
                 str(r["registrant_count"]),
                 str(r["both_ea_qes_registrant_count"]),
+                r["ea_families"],
+                r["qes_families"],
             ]
             for r in pair_rollup[:250]
         ],
     )
 
     leverage_table = _table(
-        ["Type", "Relationship Name", "Both EA+QES", "QES-only Expand", "Families"],
+        ["Type", "Relationship Name", "Both EA+QES", "QES-only Expand", "Families", "EA Family Names", "QES Family Names"],
         [
             [
                 r["relationship_type"],
@@ -295,6 +333,8 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
                 str(r["both_ea_qes_registrant_count"]),
                 str(r["expandable_qes_only_registrants"]),
                 str(r["family_count"]),
+                r["ea_families"],
+                r["qes_families"],
             ]
             for r in leverage[:250]
         ],
