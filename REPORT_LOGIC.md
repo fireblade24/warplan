@@ -202,7 +202,7 @@ This report is separate from existing NCEN outputs and is intentionally EA-first
 ### 1) Data source and row scope
 
 Source view:
-- `sec-edgar-ralph.warplan.v_ea_clients_other_filing_agents`
+- `sec-edgar-ralph.warplan.v_ea_filings_with_ncen_and_other_agents`
 
 SQL logic:
 - Keeps non-empty `ncen_family_investment_company_name` rows.

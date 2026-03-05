@@ -1,5 +1,5 @@
 -- NCEN Family Executive Report (new) - EA perspective.
--- Uses EA-focused view and keeps one latest row per family/fund.
+-- Uses EA+NCEN enriched view and keeps one latest row per family/fund.
 WITH base AS (
   SELECT
     companyCik,
@@ -15,15 +15,16 @@ WITH base AS (
     ncen_adviser_names,
     ncen_adviser_types,
     total_filings_in_window,
-    ea_filings_in_window,
+    edgar_agents_filings_in_window AS ea_filings_in_window,
     ea_pct_of_company_filings_in_window,
-    ever_filed_by_edgar_agents_llc_in_window,
+    (COALESCE(edgar_agents_filings_in_window, 0) > 0) AS ever_filed_by_edgar_agents_llc_in_window,
     total_agent_groups_used_in_window,
-    agent_groups_used_in_window,
+    all_agent_groups_used_in_window AS agent_groups_used_in_window,
+    other_agent_groups_used_in_window,
     filingDate,
     indexDate,
     load_ts
-  FROM `sec-edgar-ralph.warplan.v_ea_clients_other_filing_agents`
+  FROM `sec-edgar-ralph.warplan.v_ea_filings_with_ncen_and_other_agents`
   WHERE ncen_family_investment_company_name IS NOT NULL
     AND TRIM(ncen_family_investment_company_name) != ''
 ),
@@ -70,6 +71,7 @@ SELECT
   lf.ever_filed_by_edgar_agents_llc_in_window,
   lf.total_agent_groups_used_in_window,
   lf.agent_groups_used_in_window,
+  lf.other_agent_groups_used_in_window,
   fft.ea_form_types_for_fund,
   fft.ea_form_type_count_pairs
 FROM latest_fund lf

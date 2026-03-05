@@ -122,7 +122,7 @@ Outputs:
 ## NCEN Family Executive Report (new) — EA Perspective
 
 This is a separate report (does not replace existing NCEN reports) based on:
-- `sec-edgar-ralph.warplan.v_ea_clients_other_filing_agents`
+- `sec-edgar-ralph.warplan.v_ea_filings_with_ncen_and_other_agents`
 
 What it does:
 - front summary page with all EA form types + filing counts across dataset

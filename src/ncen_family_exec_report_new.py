@@ -251,7 +251,7 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> list[dict[str
   <p><b>Admin Names:</b> {html.escape(_display(r.get('ncen_admin_names')))}</p>
   <p><b>Adviser Names:</b> {html.escape(_display(r.get('ncen_adviser_names')))}</p>
   <p><b>Adviser Types:</b> {html.escape(_display(r.get('ncen_adviser_types')))}</p>
-  <p><b>Other Filing Agents:</b> {html.escape(_display(r.get('agent_groups_used_in_window')))}</p>
+  <p><b>Other Filing Agents:</b> {html.escape(_display(r.get('other_agent_groups_used_in_window')))}</p>
 </div>
 """
             )
