@@ -118,3 +118,35 @@ Outputs:
 - `output/ncen_relationship_network_report_by_admin.csv`
 - `output/ncen_relationship_network_report_by_adviser.csv`
 - `output/ncen_relationship_network_report_admin_adviser_pairs.csv`
+
+## NCEN Family Executive Report (new) — EA Perspective
+
+This is a separate report (does not replace existing NCEN reports) based on:
+- `sec-edgar-ralph.warplan.v_ea_clients_other_filing_agents`
+
+What it does:
+- front summary page with all EA form types + filing counts across dataset
+- AI-tiered family priority list
+- one page per non-null `ncen_family_investment_company_name`
+- readable fund cards per family (not a dense table)
+- includes EA form types filed for each fund
+- includes admin/adviser fields and filing-agent overlap context
+- includes AI executive summary per family
+
+Files:
+- SQL logic: `sql/ncen_family_exec_report_new.sql`
+- Runner: `src/ncen_family_exec_report_new.py`
+
+Run:
+```bash
+python src/ncen_family_exec_report_new.py
+```
+
+Optional:
+```bash
+python src/ncen_family_exec_report_new.py   --project-id <your-gcp-project>   --output output/ncen_family_exec_report_new.pdf
+```
+
+Outputs:
+- `output/ncen_family_exec_report_new.pdf`
+- `output/ncen_family_exec_report_new.csv`
