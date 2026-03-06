@@ -75,7 +75,6 @@ admin_rollup AS (
         ')'
       ),
       '; '
-      ORDER BY fa.companyName
     ) AS funds_list
   FROM fund_admins fa
   JOIN fund_first_seen ffs
