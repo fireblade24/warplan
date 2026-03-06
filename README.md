@@ -150,3 +150,37 @@ python src/ncen_family_exec_report_new.py   --project-id <your-gcp-project>   --
 Outputs:
 - `output/ncen_family_exec_report_new.pdf`
 - `output/ncen_family_exec_report_new.csv`
+
+## NCEN Admin Workload Report (new)
+
+Brand-new report to map which administrators have the largest fund workload and who is most active in launching new funds.
+
+Source:
+- `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+
+What it does:
+- rolls up by admin
+- shows total distinct funds handled by each admin
+- shows list of funds handled by each admin
+- adds `new_funds_launched_in_window` (first-ever filing date for the fund falls in trailing 365-day window ending at max filing date in dataset)
+- sorts by largest fund workload first
+
+Files:
+- SQL logic: `sql/ncen_admin_workload_report.sql`
+- Runner: `src/ncen_admin_workload_report.py`
+
+Run:
+```bash
+python src/ncen_admin_workload_report.py
+```
+
+Optional:
+```bash
+python src/ncen_admin_workload_report.py \
+  --project-id <your-gcp-project> \
+  --output output/ncen_admin_workload_report.pdf
+```
+
+Outputs:
+- `output/ncen_admin_workload_report.pdf`
+- `output/ncen_admin_workload_report.csv`
