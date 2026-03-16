@@ -230,6 +230,7 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
             [
                 fr["family"],
                 fr["fund"],
+                "; ".join(fr["admins"]) or "-",
                 "Y" if fr["has_qes"] else "N",
                 fr["qes_forms"] or "-",
                 "Y" if fr["has_ea"] else "N",
@@ -279,7 +280,7 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
   {_render_section_pages(3, 'Fund Families in Common: QES and EA', 'Families where both QES and EA file at least one fund.', ['Fund Family', 'Fund Family', 'Fund Family'], section_3_rows)}
   {_render_section_pages(4, 'Fund Families in Common: File Point and EA', 'Families where both File Point and EA file at least one fund.', ['Fund Family', 'Fund Family', 'Fund Family'], section_4_rows)}
   {_render_section_pages(5, 'Fund Families in Common: QES, EA, and File Point', 'Families where all three filing agents are present.', ['Fund Family', 'Fund Family', 'Fund Family'], section_5_rows)}
-  {_render_section_pages(6, 'QES + EA + File Point Common Families with Forms by Fund', 'Shows forms each agent files and whether each agent files each fund.', ['Fund Family', 'Fund', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_6_rows, rows_per_page=18)}
+  {_render_section_pages(6, 'QES + EA + File Point Common Families with Forms by Fund', 'Shows admin, forms each agent files, and whether each agent files each fund.', ['Fund Family', 'Fund', 'Admin(s)', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_6_rows, rows_per_page=16)}
   {_render_section_pages(7, 'Admins: How Many Funds Each Agent Works With', 'Counts of distinct funds per admin by filing agent.', ['Admin', 'QES Funds', 'EA Funds', 'File Point Funds', 'All Distinct Funds'], admin_rows)}
   {_render_section_pages(8, 'Advisers: How Many Funds Each Agent Works With', 'Counts of distinct funds per adviser by filing agent.', ['Adviser', 'QES Funds', 'EA Funds', 'File Point Funds', 'All Distinct Funds'], adviser_rows)}
   {_render_section_pages(9, 'Admins: Which Funds Work With QES, EA, and File Point', 'Fund-by-fund agent presence by admin.', ['Admin', 'Fund (Family :: Fund)', 'QES', 'EA', 'File Point'], admin_fund_rows, rows_per_page=20)}
