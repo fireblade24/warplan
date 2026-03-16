@@ -184,3 +184,41 @@ python src/ncen_admin_workload_report.py \
 Outputs:
 - `output/ncen_admin_workload_report.pdf`
 - `output/ncen_admin_workload_report.csv`
+
+## NCEN Multi-Agent Fund Family Report (new)
+
+New multi-section report requested to compare QES, Edgar Agents (EA), and File Point coverage at fund-family, fund, admin, and adviser levels.
+
+Source:
+- `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+
+What it does:
+- Section 1: all fund families where QES appears
+- Section 2: fund families in common between QES and EA
+- Section 3: fund families in common between QES, EA, and File Point
+- Section 4: common QES+EA+File Point families with fund-level form lists and agent presence flags
+- Section 5: all admins with counts of distinct funds worked by QES, EA, and File Point
+- Section 6: all advisers with counts of distinct funds worked by QES, EA, and File Point
+- Section 7: all admins with exact fund list and QES/EA/File Point flags per fund
+- Section 8: all advisers with exact fund list and QES/EA/File Point flags per fund
+- Every section restarts page numbering and prints `Page N of X` inside the section
+
+Files:
+- SQL logic: `sql/ncen_multi_agent_fund_family_report.sql`
+- Runner: `src/ncen_multi_agent_fund_family_report.py`
+
+Run:
+```bash
+python src/ncen_multi_agent_fund_family_report.py
+```
+
+Optional:
+```bash
+python src/ncen_multi_agent_fund_family_report.py \
+  --project-id <your-gcp-project> \
+  --output output/ncen_multi_agent_fund_family_report.pdf
+```
+
+Outputs:
+- `output/ncen_multi_agent_fund_family_report.pdf`
+- `output/ncen_multi_agent_fund_family_report.csv`
