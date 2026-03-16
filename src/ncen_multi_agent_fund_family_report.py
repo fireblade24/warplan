@@ -96,6 +96,14 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body or '<tr><td colspan=\"99\">No rows</td></tr>'}</tbody></table>"
 
 
+def _format_three_column_list(items: list[str]) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for i in range(0, len(items), 3):
+        batch = items[i : i + 3]
+        rows.append(batch + [""] * (3 - len(batch)))
+    return rows
+
+
 def _render_section_pages(section_num: int, title: str, subtitle: str, headers: list[str], rows: list[list[str]], rows_per_page: int = 25) -> str:
     chunks = _chunked(rows, rows_per_page)
     total_pages = len(chunks)
@@ -119,7 +127,9 @@ def _render_section_pages(section_num: int, title: str, subtitle: str, headers: 
 def _prepare_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     fund_rows = []
     families_qes: set[str] = set()
+    families_fp: set[str] = set()
     families_qes_ea: set[str] = set()
+    families_fp_ea: set[str] = set()
     families_qes_ea_fp: set[str] = set()
 
     for row in rows:
@@ -131,8 +141,12 @@ def _prepare_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         family_has_fp = _is_true(row.get("family_has_file_point"))
         if family_has_qes:
             families_qes.add(family)
+        if family_has_fp:
+            families_fp.add(family)
         if family_has_qes and family_has_ea:
             families_qes_ea.add(family)
+        if family_has_fp and family_has_ea:
+            families_fp_ea.add(family)
         if family_has_qes and family_has_ea and family_has_fp:
             families_qes_ea_fp.add(family)
 
@@ -187,7 +201,9 @@ def _prepare_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "fund_rows": fund_rows,
         "families_qes": sorted(families_qes),
+        "families_fp": sorted(families_fp),
         "families_qes_ea": sorted(families_qes_ea),
+        "families_fp_ea": sorted(families_fp_ea),
         "families_qes_ea_fp": sorted(families_qes_ea_fp),
         "admin_rollup": admin_rollup,
         "adviser_rollup": adviser_rollup,
@@ -200,15 +216,17 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
     prepared = _prepare_rows(rows)
     fund_rows = prepared["fund_rows"]
 
-    section_1_rows = [[family] for family in prepared["families_qes"]]
-    section_2_rows = [[family] for family in prepared["families_qes_ea"]]
-    section_3_rows = [[family] for family in prepared["families_qes_ea_fp"]]
+    section_1_rows = _format_three_column_list(prepared["families_qes"])
+    section_2_rows = _format_three_column_list(prepared["families_fp"])
+    section_3_rows = _format_three_column_list(prepared["families_qes_ea"])
+    section_4_rows = _format_three_column_list(prepared["families_fp_ea"])
+    section_5_rows = _format_three_column_list(prepared["families_qes_ea_fp"])
 
-    section_4_rows = []
+    section_6_rows = []
     for fr in sorted(fund_rows, key=lambda x: (x["family"], x["fund"])):
         if fr["family"] not in prepared["families_qes_ea_fp"]:
             continue
-        section_4_rows.append(
+        section_6_rows.append(
             [
                 fr["family"],
                 fr["fund"],
@@ -256,14 +274,16 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
   </style>
 </head>
 <body>
-  {_render_section_pages(1, 'All Fund Families where QES is a client filing agent', 'Unique fund families with QES presence.', ['Fund Family'], section_1_rows)}
-  {_render_section_pages(2, 'Fund Families in Common: QES and EA', 'Families where both QES and EA file at least one fund.', ['Fund Family'], section_2_rows)}
-  {_render_section_pages(3, 'Fund Families in Common: QES, EA, and File Point', 'Families where all three filing agents are present.', ['Fund Family'], section_3_rows)}
-  {_render_section_pages(4, 'QES + EA + File Point Common Families with Forms by Fund', 'Shows forms each agent files and whether each agent files each fund.', ['Fund Family', 'Fund', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_4_rows, rows_per_page=18)}
-  {_render_section_pages(5, 'Admins: How Many Funds Each Agent Works With', 'Counts of distinct funds per admin by filing agent.', ['Admin', 'QES Funds', 'EA Funds', 'File Point Funds', 'All Distinct Funds'], admin_rows)}
-  {_render_section_pages(6, 'Advisers: How Many Funds Each Agent Works With', 'Counts of distinct funds per adviser by filing agent.', ['Adviser', 'QES Funds', 'EA Funds', 'File Point Funds', 'All Distinct Funds'], adviser_rows)}
-  {_render_section_pages(7, 'Admins: Which Funds Work With QES, EA, and File Point', 'Fund-by-fund agent presence by admin.', ['Admin', 'Fund (Family :: Fund)', 'QES', 'EA', 'File Point'], admin_fund_rows, rows_per_page=20)}
-  {_render_section_pages(8, 'Advisers: Which Funds Work With QES, EA, and File Point', 'Fund-by-fund agent presence by adviser.', ['Adviser', 'Fund (Family :: Fund)', 'QES', 'EA', 'File Point'], adviser_fund_rows, rows_per_page=20)}
+  {_render_section_pages(1, 'All Fund Families where QES is a client filing agent', 'Unique fund families with QES presence.', ['Fund Family', 'Fund Family', 'Fund Family'], section_1_rows)}
+  {_render_section_pages(2, 'All Fund Families where File Point appears', 'Unique fund families with File Point presence.', ['Fund Family', 'Fund Family', 'Fund Family'], section_2_rows)}
+  {_render_section_pages(3, 'Fund Families in Common: QES and EA', 'Families where both QES and EA file at least one fund.', ['Fund Family', 'Fund Family', 'Fund Family'], section_3_rows)}
+  {_render_section_pages(4, 'Fund Families in Common: File Point and EA', 'Families where both File Point and EA file at least one fund.', ['Fund Family', 'Fund Family', 'Fund Family'], section_4_rows)}
+  {_render_section_pages(5, 'Fund Families in Common: QES, EA, and File Point', 'Families where all three filing agents are present.', ['Fund Family', 'Fund Family', 'Fund Family'], section_5_rows)}
+  {_render_section_pages(6, 'QES + EA + File Point Common Families with Forms by Fund', 'Shows forms each agent files and whether each agent files each fund.', ['Fund Family', 'Fund', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_6_rows, rows_per_page=18)}
+  {_render_section_pages(7, 'Admins: How Many Funds Each Agent Works With', 'Counts of distinct funds per admin by filing agent.', ['Admin', 'QES Funds', 'EA Funds', 'File Point Funds', 'All Distinct Funds'], admin_rows)}
+  {_render_section_pages(8, 'Advisers: How Many Funds Each Agent Works With', 'Counts of distinct funds per adviser by filing agent.', ['Adviser', 'QES Funds', 'EA Funds', 'File Point Funds', 'All Distinct Funds'], adviser_rows)}
+  {_render_section_pages(9, 'Admins: Which Funds Work With QES, EA, and File Point', 'Fund-by-fund agent presence by admin.', ['Admin', 'Fund (Family :: Fund)', 'QES', 'EA', 'File Point'], admin_fund_rows, rows_per_page=20)}
+  {_render_section_pages(10, 'Advisers: Which Funds Work With QES, EA, and File Point', 'Fund-by-fund agent presence by adviser.', ['Adviser', 'Fund (Family :: Fund)', 'QES', 'EA', 'File Point'], adviser_fund_rows, rows_per_page=20)}
 </body>
 </html>
 """
@@ -273,13 +293,15 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
 
     summary_rows = [
         {"section": "section_1_qes_families", "row_count": len(section_1_rows)},
-        {"section": "section_2_qes_ea_families", "row_count": len(section_2_rows)},
-        {"section": "section_3_qes_ea_file_point_families", "row_count": len(section_3_rows)},
-        {"section": "section_4_fund_forms", "row_count": len(section_4_rows)},
-        {"section": "section_5_admin_counts", "row_count": len(admin_rows)},
-        {"section": "section_6_adviser_counts", "row_count": len(adviser_rows)},
-        {"section": "section_7_admin_funds", "row_count": len(admin_fund_rows)},
-        {"section": "section_8_adviser_funds", "row_count": len(adviser_fund_rows)},
+        {"section": "section_2_file_point_families", "row_count": len(section_2_rows)},
+        {"section": "section_3_qes_ea_families", "row_count": len(section_3_rows)},
+        {"section": "section_4_file_point_ea_families", "row_count": len(section_4_rows)},
+        {"section": "section_5_qes_ea_file_point_families", "row_count": len(section_5_rows)},
+        {"section": "section_6_fund_forms", "row_count": len(section_6_rows)},
+        {"section": "section_7_admin_counts", "row_count": len(admin_rows)},
+        {"section": "section_8_adviser_counts", "row_count": len(adviser_rows)},
+        {"section": "section_9_admin_funds", "row_count": len(admin_fund_rows)},
+        {"section": "section_10_adviser_funds", "row_count": len(adviser_fund_rows)},
     ]
     return {"summary": summary_rows}
 

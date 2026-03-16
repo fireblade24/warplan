@@ -193,14 +193,16 @@ Source:
 - `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
 
 What it does:
-- Section 1: all fund families where QES appears
-- Section 2: fund families in common between QES and EA
-- Section 3: fund families in common between QES, EA, and File Point
-- Section 4: common QES+EA+File Point families with fund-level form lists and agent presence flags
-- Section 5: all admins with counts of distinct funds worked by QES, EA, and File Point
-- Section 6: all advisers with counts of distinct funds worked by QES, EA, and File Point
-- Section 7: all admins with exact fund list and QES/EA/File Point flags per fund
-- Section 8: all advisers with exact fund list and QES/EA/File Point flags per fund
+- Section 1: all fund families where QES appears (3-column list)
+- Section 2: all fund families where File Point appears (3-column list)
+- Section 3: fund families in common between QES and EA (3-column list)
+- Section 4: fund families in common between File Point and EA (3-column list)
+- Section 5: fund families in common between QES, EA, and File Point (3-column list)
+- Section 6: common QES+EA+File Point families with fund-level form lists and agent presence flags
+- Section 7: all admins with counts of distinct funds worked by QES, EA, and File Point
+- Section 8: all advisers with counts of distinct funds worked by QES, EA, and File Point
+- Section 9: all admins with exact fund list and QES/EA/File Point flags per fund
+- Section 10: all advisers with exact fund list and QES/EA/File Point flags per fund
 - Every section restarts page numbering and prints `Page N of X` inside the section
 
 Files:
