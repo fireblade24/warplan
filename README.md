@@ -200,7 +200,9 @@ What it does:
 - Section 3: fund families in common between QES and EA (3-column list)
 - Section 4: fund families in common between File Point and EA (3-column list)
 - Section 5: fund families in common between QES, EA, and File Point (3-column list)
-- Section 6: common QES+EA+File Point families with fund-level admin, form lists, and agent presence flags
+- Section 6a: common QES+EA+File Point families with fund-level admin, form lists, and agent presence flags
+- Section 6b: QES+EA families with fund-level admin, form lists, and agent presence flags
+- Section 6c: File Point+EA families with fund-level admin, form lists, and agent presence flags
 - Section 7: all admins with counts of distinct funds worked by QES, EA, and File Point
 - Section 8: all advisers with counts of distinct funds worked by QES, EA, and File Point
 - Section 9: all admins with exact fund list and QES/EA/File Point flags per fund
