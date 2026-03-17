@@ -157,6 +157,7 @@ Brand-new report to map which administrators have the largest fund workload and 
 
 Source:
 - `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+- Date window: filings from `2025-01-01` through `CURRENT_DATE()`
 
 What it does:
 - rolls up by admin
@@ -191,6 +192,7 @@ New multi-section report requested to compare QES, Edgar Agents (EA), and File P
 
 Source:
 - `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+- Date window: filings from `2025-01-01` through `CURRENT_DATE()`
 
 What it does:
 - Section 1: all fund families where QES appears (3-column list)

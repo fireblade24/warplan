@@ -15,7 +15,9 @@ WITH base AS (
       ELSE NULL
     END AS agent_tag
   FROM `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
-  WHERE TRIM(COALESCE(ncen_family_investment_company_name, '')) <> ''
+  WHERE DATE(filingDate) >= DATE '2025-01-01'
+    AND DATE(filingDate) <= CURRENT_DATE()
+    AND TRIM(COALESCE(ncen_family_investment_company_name, '')) <> ''
     AND TRIM(COALESCE(companyName, '')) <> ''
 ),
 fund_agents AS (
