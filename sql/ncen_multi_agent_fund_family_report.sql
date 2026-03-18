@@ -12,7 +12,8 @@ WITH base AS (
       WHEN REGEXP_CONTAINS(UPPER(COALESCE(filing_agent_group, '')), r'QUALITY\s+EDGAR\s+SOLUTIONS|\bQES\b') THEN 'QES'
       WHEN REGEXP_CONTAINS(UPPER(COALESCE(filing_agent_group, '')), r'EDGAR\s+AGENTS') THEN 'EA'
       WHEN REGEXP_CONTAINS(UPPER(COALESCE(filing_agent_group, '')), r'FILE\s*POINT') THEN 'FILE_POINT'
-      ELSE NULL
+      WHEN REGEXP_CONTAINS(UPPER(COALESCE(filing_agent_group, '')), r'DFIN|DONNELLEY') THEN 'DFIN'
+      ELSE 'OTHER'
     END AS agent_tag
   FROM `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
   WHERE DATE(filingDate) >= DATE '2025-01-01'
@@ -29,7 +30,6 @@ fund_agents AS (
     COUNT(*) AS filings,
     STRING_AGG(DISTINCT CAST(formType AS STRING), ', ' ORDER BY CAST(formType AS STRING)) AS forms
   FROM base
-  WHERE agent_tag IS NOT NULL
   GROUP BY family_name, companyCik, companyName, agent_tag
 ),
 fund_rollup AS (
@@ -40,9 +40,18 @@ fund_rollup AS (
     MAX(IF(agent_tag = 'QES', 1, 0)) = 1 AS has_qes,
     MAX(IF(agent_tag = 'EA', 1, 0)) = 1 AS has_ea,
     MAX(IF(agent_tag = 'FILE_POINT', 1, 0)) = 1 AS has_file_point,
+    MAX(IF(agent_tag = 'OTHER', 1, 0)) = 1 AS has_other,
+    MAX(IF(agent_tag = 'DFIN', 1, 0)) = 1 AS has_dfin,
     MAX(IF(agent_tag = 'QES', forms, NULL)) AS qes_forms,
     MAX(IF(agent_tag = 'EA', forms, NULL)) AS ea_forms,
-    MAX(IF(agent_tag = 'FILE_POINT', forms, NULL)) AS file_point_forms
+    MAX(IF(agent_tag = 'FILE_POINT', forms, NULL)) AS file_point_forms,
+    MAX(IF(agent_tag = 'OTHER', forms, NULL)) AS other_forms,
+    MAX(IF(agent_tag = 'DFIN', forms, NULL)) AS dfin_forms,
+    SUM(IF(agent_tag = 'QES', filings, 0)) AS qes_filing_count,
+    SUM(IF(agent_tag = 'EA', filings, 0)) AS ea_filing_count,
+    SUM(IF(agent_tag = 'FILE_POINT', filings, 0)) AS file_point_filing_count,
+    SUM(IF(agent_tag = 'OTHER', filings, 0)) AS other_filing_count,
+    SUM(IF(agent_tag = 'DFIN', filings, 0)) AS dfin_filing_count
   FROM fund_agents
   GROUP BY family_name, companyCik, companyName
 ),
@@ -80,9 +89,18 @@ SELECT
   f.has_qes,
   f.has_ea,
   f.has_file_point,
+  f.has_other,
+  f.has_dfin,
   f.qes_forms,
   f.ea_forms,
   f.file_point_forms,
+  f.other_forms,
+  f.dfin_forms,
+  f.qes_filing_count,
+  f.ea_filing_count,
+  f.file_point_filing_count,
+  f.other_filing_count,
+  f.dfin_filing_count,
   p.family_has_qes,
   p.family_has_ea,
   p.family_has_file_point,

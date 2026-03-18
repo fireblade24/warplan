@@ -10,12 +10,15 @@ import json
 import os
 import re
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SQL_PATH = ROOT / "sql" / "ncen_multi_agent_fund_family_report.sql"
 OUTPUT_DIR = ROOT / "output"
+
+HIGH_VALUE_FORMS = {"N-CSR", "N-2", "486BPOS", "N-PX", "SC TO-I"}
 
 
 def _normalized(value: str | None) -> str:
@@ -79,6 +82,13 @@ def _split_entities(value: Any) -> list[str]:
         if name:
             cleaned.append(name)
     return sorted(set(cleaned))
+
+
+def _split_forms(value: str) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    return [part.strip() for part in text.split(",") if part.strip()]
 
 
 def _chunked(rows: list[list[str]], size: int) -> list[list[list[str]]]:
@@ -178,10 +188,19 @@ def _prepare_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "has_qes": _is_true(row.get("has_qes")),
                 "has_ea": _is_true(row.get("has_ea")),
                 "has_fp": _is_true(row.get("has_file_point")),
+                "has_other": _is_true(row.get("has_other")),
+                "has_dfin": _is_true(row.get("has_dfin")),
                 "qes_forms": str(row.get("qes_forms") or "").strip(),
                 "ea_forms": str(row.get("ea_forms") or "").strip(),
                 "fp_forms": str(row.get("file_point_forms") or "").strip(),
-                "admins": _split_entities(row.get("ncen_admin_names")),
+                "other_forms": str(row.get("other_forms") or "").strip(),
+                "dfin_forms": str(row.get("dfin_forms") or "").strip(),
+                "qes_filing_count": int(float(row.get("qes_filing_count") or 0)),
+                "ea_filing_count": int(float(row.get("ea_filing_count") or 0)),
+                "file_point_filing_count": int(float(row.get("file_point_filing_count") or 0)),
+                "other_filing_count": int(float(row.get("other_filing_count") or 0)),
+                "dfin_filing_count": int(float(row.get("dfin_filing_count") or 0)),
+                "admins": _split_entities(row.get("ncen_admin_names")) or ["(Unknown Admin)"],
                 "advisers": _split_entities(row.get("ncen_adviser_names")),
             }
         )
@@ -231,6 +250,184 @@ def _prepare_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _build_section_11_outputs(fund_rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    clean_rows: list[dict[str, Any]] = []
+    admin_metrics: dict[str, dict[str, int]] = defaultdict(lambda: {"ea": 0, "qes": 0, "fp": 0, "other": 0, "total": 0})
+    family_tracker: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for fr in fund_rows:
+        agent_forms = [
+            ("EA", fr["ea_forms"]),
+            ("QES", fr["qes_forms"]),
+            ("FilePoint", fr["fp_forms"]),
+            ("DFIN", fr["dfin_forms"]),
+            ("Other", fr["other_forms"]),
+        ]
+
+        for admin in fr["admins"]:
+            admin_metrics[admin]["ea"] += fr["ea_filing_count"]
+            admin_metrics[admin]["qes"] += fr["qes_filing_count"]
+            admin_metrics[admin]["fp"] += fr["file_point_filing_count"]
+            admin_metrics[admin]["other"] += fr["other_filing_count"] + fr["dfin_filing_count"]
+            admin_metrics[admin]["total"] += (
+                fr["ea_filing_count"]
+                + fr["qes_filing_count"]
+                + fr["file_point_filing_count"]
+                + fr["other_filing_count"]
+                + fr["dfin_filing_count"]
+            )
+
+            family_key = (admin, fr["family"])
+            slot = family_tracker.setdefault(
+                family_key,
+                {
+                    "funds": set(),
+                    "has_ea": False,
+                    "has_qes": False,
+                    "has_fp": False,
+                    "high_value": 0,
+                },
+            )
+            fund_key = (fr["family"], fr["fund"])
+            slot["funds"].add(fund_key)
+            slot["has_ea"] = slot["has_ea"] or fr["has_ea"]
+            slot["has_qes"] = slot["has_qes"] or fr["has_qes"]
+            slot["has_fp"] = slot["has_fp"] or fr["has_fp"]
+
+            for filing_agent, forms_value in agent_forms:
+                for form_type in _split_forms(forms_value):
+                    clean_rows.append(
+                        {
+                            "Administrator": admin,
+                            "Fund Family": fr["family"],
+                            "Fund": fr["fund"],
+                            "Form Type": form_type,
+                            "Filing Agent": filing_agent,
+                        }
+                    )
+                    if form_type in HIGH_VALUE_FORMS:
+                        slot["high_value"] += 1
+
+    summary_rows = []
+    for admin, metric in sorted(admin_metrics.items(), key=lambda x: (-x[1]["total"], x[0])):
+        total = metric["total"]
+        summary_rows.append(
+            {
+                "Administrator": admin,
+                "Total Filings": total,
+                "EA Count": metric["ea"],
+                "QES Count": metric["qes"],
+                "FilePoint Count": metric["fp"],
+                "Other Count": metric["other"],
+                "EA %": round((metric["ea"] / total * 100), 2) if total else 0.0,
+                "QES %": round((metric["qes"] / total * 100), 2) if total else 0.0,
+                "FilePoint %": round((metric["fp"] / total * 100), 2) if total else 0.0,
+                "Other %": round((metric["other"] / total * 100), 2) if total else 0.0,
+            }
+        )
+
+    opportunity_rows = []
+    family_priority_map: dict[tuple[str, str], tuple[int, int, int]] = {}
+    for (admin, family), slot in family_tracker.items():
+        competitors = "None"
+        if slot["has_qes"] and slot["has_fp"]:
+            competitors = "Both"
+        elif slot["has_qes"]:
+            competitors = "QES"
+        elif slot["has_fp"]:
+            competitors = "FilePoint"
+
+        if slot["has_ea"] and competitors != "None":
+            opportunity = "Expansion"
+        elif not slot["has_ea"]:
+            opportunity = "New"
+        else:
+            opportunity = "Defend"
+
+        agent_presence_count = int(slot["has_ea"]) + int(slot["has_qes"]) + int(slot["has_fp"])
+        mix = "Single Agent" if agent_presence_count <= 1 else "Multi-Agent"
+
+        row = {
+            "Administrator": admin,
+            "Fund Family": family,
+            "EA Presence (Yes/No)": "Yes" if slot["has_ea"] else "No",
+            "Competitors Present (QES/FilePoint/Both)": competitors,
+            "Fund Family Agent Mix": mix,
+            "Opportunity Type (Expansion / New / Defend)": opportunity,
+            "Number of Funds": len(slot["funds"]),
+            "Number of High-Value Filings": slot["high_value"],
+        }
+        opportunity_rows.append(row)
+        family_priority_map[(admin, family)] = (
+            1 if mix == "Multi-Agent" else 0,
+            row["Number of High-Value Filings"],
+            row["Number of Funds"],
+        )
+
+    opportunity_rows.sort(
+        key=lambda x: (
+            -next((s["Total Filings"] for s in summary_rows if s["Administrator"] == x["Administrator"]), 0),
+            -family_priority_map[(x["Administrator"], x["Fund Family"])][0],
+            -x["Number of High-Value Filings"],
+            -x["Number of Funds"],
+            x["Administrator"],
+            x["Fund Family"],
+        )
+    )
+
+    admin_order = [row["Administrator"] for row in summary_rows]
+    admin_rank = {admin: idx for idx, admin in enumerate(admin_order)}
+
+    clean_rows.sort(
+        key=lambda x: (
+            admin_rank.get(x["Administrator"], 999999),
+            -family_priority_map.get((x["Administrator"], x["Fund Family"]), (0, 0, 0))[0],
+            -family_priority_map.get((x["Administrator"], x["Fund Family"]), (0, 0, 0))[1],
+            -family_priority_map.get((x["Administrator"], x["Fund Family"]), (0, 0, 0))[2],
+            x["Fund Family"],
+            x["Fund"],
+            x["Form Type"],
+            x["Filing Agent"],
+        )
+    )
+
+    pivot_admin_rows = [
+        {
+            "Administrator": row["Administrator"],
+            "EA Count": row["EA Count"],
+            "QES Count": row["QES Count"],
+            "FilePoint Count": row["FilePoint Count"],
+            "Other Count": row["Other Count"],
+            "EA %": row["EA %"],
+            "QES %": row["QES %"],
+            "FilePoint %": row["FilePoint %"],
+            "Other %": row["Other %"],
+        }
+        for row in summary_rows
+    ]
+
+    form_agent_counter: dict[tuple[str, str, str], int] = defaultdict(int)
+    for row in clean_rows:
+        form_agent_counter[(row["Administrator"], row["Form Type"], row["Filing Agent"])] += 1
+    pivot_admin_form_rows = [
+        {
+            "Administrator": admin,
+            "Form Type": form,
+            "Filing Agent": agent,
+            "Count": count,
+        }
+        for (admin, form, agent), count in sorted(form_agent_counter.items(), key=lambda x: (x[0][0], x[0][1], x[0][2]))
+    ]
+
+    return {
+        "clean": clean_rows,
+        "summary_admin": summary_rows,
+        "opportunity": opportunity_rows,
+        "pivot_admin_agent": pivot_admin_rows,
+        "pivot_admin_form_agent": pivot_admin_form_rows,
+    }
+
+
 def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, list[dict[str, Any]]]:
     from weasyprint import HTML
 
@@ -263,6 +460,46 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
         for fund_key, has_qes, has_ea, has_fp in uniq:
             adviser_fund_rows.append([adviser, fund_key, "Y" if has_qes else "N", "Y" if has_ea else "N", "Y" if has_fp else "N"])
 
+    section_11 = _build_section_11_outputs(fund_rows)
+    section_11_1_rows = [
+        [
+            r["Administrator"],
+            r["Fund Family"],
+            r["Fund"],
+            r["Form Type"],
+            r["Filing Agent"],
+        ]
+        for r in section_11["clean"]
+    ]
+    section_11_2_rows = [
+        [
+            r["Administrator"],
+            str(r["Total Filings"]),
+            str(r["EA Count"]),
+            str(r["QES Count"]),
+            str(r["FilePoint Count"]),
+            str(r["Other Count"]),
+            f"{r['EA %']}%",
+            f"{r['QES %']}%",
+            f"{r['FilePoint %']}%",
+            f"{r['Other %']}%",
+        ]
+        for r in section_11["summary_admin"]
+    ]
+    section_11_3_rows = [
+        [
+            r["Administrator"],
+            r["Fund Family"],
+            r["EA Presence (Yes/No)"],
+            r["Competitors Present (QES/FilePoint/Both)"],
+            r["Fund Family Agent Mix"],
+            r["Opportunity Type (Expansion / New / Defend)"],
+            str(r["Number of Funds"]),
+            str(r["Number of High-Value Filings"]),
+        ]
+        for r in section_11["opportunity"]
+    ]
+
     html_doc = f"""
 <!doctype html>
 <html>
@@ -294,6 +531,9 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
   {_render_section_pages('8', 'Advisers: How Many Funds Each Agent Works With', 'Counts of distinct funds per adviser by filing agent.', ['Adviser', 'QES Funds', 'EA Funds', 'File Point Funds', 'All Distinct Funds'], adviser_rows)}
   {_render_section_pages('9', 'Admins: Which Funds Work With QES, EA, and File Point', 'Fund-by-fund agent presence by admin.', ['Admin', 'Fund (Family :: Fund)', 'QES', 'EA', 'File Point'], admin_fund_rows, rows_per_page=20)}
   {_render_section_pages('10', 'Advisers: Which Funds Work With QES, EA, and File Point', 'Fund-by-fund agent presence by adviser.', ['Adviser', 'Fund (Family :: Fund)', 'QES', 'EA', 'File Point'], adviser_fund_rows, rows_per_page=20)}
+  {_render_section_pages('11.1', 'Admin → Fund Family → Fund → Form Type → Filing Agent (Clean Table)', 'Full hierarchy preserving form-level and filing-agent relationships.', ['Administrator', 'Fund Family', 'Fund', 'Form Type', 'Filing Agent'], section_11_1_rows, rows_per_page=22)}
+  {_render_section_pages('11.2', 'Summary Table by Admin (Filing Agent Distribution)', 'Filing distribution and share by admin across EA, QES, FilePoint, and Other.', ['Administrator', 'Total Filings', 'EA Count', 'QES Count', 'FilePoint Count', 'Other Count', 'EA %', 'QES %', 'FilePoint %', 'Other %'], section_11_2_rows, rows_per_page=24)}
+  {_render_section_pages('11.3', 'Opportunity Table (EA Expansion / New / Defend)', 'Family-level opportunity flags, agent mix, and high-value filing indicators.', ['Administrator', 'Fund Family', 'EA Presence', 'Competitors Present', 'Agent Mix', 'Opportunity Type', '# Funds', '# High-Value Filings'], section_11_3_rows, rows_per_page=22)}
 </body>
 </html>
 """
@@ -314,8 +554,18 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
         {"section": "section_8_adviser_counts", "row_count": len(adviser_rows)},
         {"section": "section_9_admin_funds", "row_count": len(admin_fund_rows)},
         {"section": "section_10_adviser_funds", "row_count": len(adviser_fund_rows)},
+        {"section": "section_11_1_clean_hierarchy", "row_count": len(section_11_1_rows)},
+        {"section": "section_11_2_admin_distribution", "row_count": len(section_11_2_rows)},
+        {"section": "section_11_3_opportunity", "row_count": len(section_11_3_rows)},
     ]
-    return {"summary": summary_rows}
+    return {
+        "summary": summary_rows,
+        "section_11_clean": section_11["clean"],
+        "section_11_summary_admin": section_11["summary_admin"],
+        "section_11_opportunity": section_11["opportunity"],
+        "section_11_pivot_admin_agent": section_11["pivot_admin_agent"],
+        "section_11_pivot_admin_form_agent": section_11["pivot_admin_form_agent"],
+    }
 
 
 def write_csv(rows: list[dict[str, Any]], output_csv: Path) -> None:
@@ -348,7 +598,14 @@ def main() -> None:
 
     rows = query_rows(project_id=project_id)
     sections = render_report(rows, Path(args.output))
-    write_csv(sections["summary"], Path(args.output).with_suffix(".csv"))
+
+    output_base = Path(args.output).with_suffix("")
+    write_csv(sections["summary"], output_base.with_suffix(".csv"))
+    write_csv(sections["section_11_clean"], output_base.with_name(output_base.name + "_section11_clean.csv"))
+    write_csv(sections["section_11_summary_admin"], output_base.with_name(output_base.name + "_section11_summary_by_admin.csv"))
+    write_csv(sections["section_11_opportunity"], output_base.with_name(output_base.name + "_section11_opportunity.csv"))
+    write_csv(sections["section_11_pivot_admin_agent"], output_base.with_name(output_base.name + "_section11_pivot_admin_agent.csv"))
+    write_csv(sections["section_11_pivot_admin_form_agent"], output_base.with_name(output_base.name + "_section11_pivot_admin_form_agent.csv"))
 
 
 if __name__ == "__main__":

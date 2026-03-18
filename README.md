@@ -207,7 +207,11 @@ What it does:
 - Section 8: all advisers with counts of distinct funds worked by QES, EA, and File Point
 - Section 9: all admins with exact fund list and QES/EA/File Point flags per fund
 - Section 10: all advisers with exact fund list and QES/EA/File Point flags per fund
+- Section 11.1: hierarchical clean table (`Admin -> Fund Family -> Fund -> Form Type -> Filing Agent`)
+- Section 11.2: summary by admin with filing-agent distribution counts and share (`EA`, `QES`, `FilePoint`, `Other`)
+- Section 11.3: opportunity table by admin/family with EA presence, competitor mix, opportunity type, fund counts, and high-value filing counts
 - Every section restarts page numbering and prints `Page N of X` inside the section
+- Agent normalization includes `QES`, `EA`, `FilePoint`, `DFIN` aliases, and `Other`
 
 Files:
 - SQL logic: `sql/ncen_multi_agent_fund_family_report.sql`
@@ -228,3 +232,8 @@ python src/ncen_multi_agent_fund_family_report.py \
 Outputs:
 - `output/ncen_multi_agent_fund_family_report.pdf`
 - `output/ncen_multi_agent_fund_family_report.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_clean.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_summary_by_admin.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_opportunity.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_pivot_admin_agent.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_pivot_admin_form_agent.csv`
