@@ -157,6 +157,7 @@ Brand-new report to map which administrators have the largest fund workload and 
 
 Source:
 - `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+- Date window: filings from `2025-01-01` through `CURRENT_DATE()`
 
 What it does:
 - rolls up by admin
@@ -184,3 +185,55 @@ python src/ncen_admin_workload_report.py \
 Outputs:
 - `output/ncen_admin_workload_report.pdf`
 - `output/ncen_admin_workload_report.csv`
+
+## NCEN Multi-Agent Fund Family Report (new)
+
+New multi-section report requested to compare QES, Edgar Agents (EA), and File Point coverage at fund-family, fund, admin, and adviser levels.
+
+Source:
+- `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+- Date window: filings from `2025-01-01` through `CURRENT_DATE()`
+
+What it does:
+- Section 1: all fund families where QES appears (3-column list)
+- Section 2: all fund families where File Point appears (3-column list)
+- Section 3: fund families in common between QES and EA (3-column list)
+- Section 4: fund families in common between File Point and EA (3-column list)
+- Section 5: fund families in common between QES, EA, and File Point (3-column list)
+- Section 6a: common QES+EA+File Point families with fund-level admin, form lists, and agent presence flags
+- Section 6b: QES+EA families with fund-level admin, form lists, and agent presence flags
+- Section 6c: File Point+EA families with fund-level admin, form lists, and agent presence flags
+- Section 7: all admins with counts of distinct funds worked by QES, EA, and File Point
+- Section 8: all advisers with counts of distinct funds worked by QES, EA, and File Point
+- Section 9: all admins with exact fund list and QES/EA/File Point flags per fund
+- Section 10: all advisers with exact fund list and QES/EA/File Point flags per fund
+- Section 11.1: hierarchical clean table (`Admin -> Fund Family -> Fund -> Form Type -> Filing Agent`)
+- Section 11.2: summary by admin with filing-agent distribution counts and share (`EA`, `QES`, `FilePoint`, `Other`)
+- Section 11.3: opportunity table by admin/family with EA presence, competitor mix, opportunity type, fund counts, and high-value filing counts
+- Every section restarts page numbering and prints `Page N of X` inside the section
+- Agent normalization includes `QES`, `EA`, `FilePoint`, `DFIN` aliases, and `Other`
+
+Files:
+- SQL logic: `sql/ncen_multi_agent_fund_family_report.sql`
+- Runner: `src/ncen_multi_agent_fund_family_report.py`
+
+Run:
+```bash
+python src/ncen_multi_agent_fund_family_report.py
+```
+
+Optional:
+```bash
+python src/ncen_multi_agent_fund_family_report.py \
+  --project-id <your-gcp-project> \
+  --output output/ncen_multi_agent_fund_family_report.pdf
+```
+
+Outputs:
+- `output/ncen_multi_agent_fund_family_report.pdf`
+- `output/ncen_multi_agent_fund_family_report.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_clean.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_summary_by_admin.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_opportunity.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_pivot_admin_agent.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_pivot_admin_form_agent.csv`
