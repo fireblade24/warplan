@@ -12,18 +12,39 @@ from ncen_multi_agent_fund_family_report import (
     OUTPUT_DIR,
     _build_section_11_outputs,
     _build_section_6_rows,
+    _chunked,
     _detect_default_project_id,
     _format_three_column_list,
     _is_effective_value,
     _normalized,
     _prepare_rows,
-    _render_section_pages,
+    _table,
     query_rows,
     write_csv,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _render_action_section_pages(section_num: str, title: str, subtitle: str, headers: list[str], rows: list[list[str]], rows_per_page: int = 25) -> str:
+    chunks = _chunked(rows, rows_per_page)
+    total_pages = len(chunks)
+    pages = []
+    for idx, chunk in enumerate(chunks, start=1):
+        pages.append(
+            "\n".join(
+                [
+                    '<section class="page">',
+                    f"<h1>Section {section_num}: {title}</h1>",
+                    f"<p>{subtitle}</p>",
+                    _table(headers, chunk),
+                    f'<div class="page-number">Page {idx} of {total_pages}</div>',
+                    "</section>",
+                ]
+            )
+        )
+    return "\n".join(pages)
 
 
 def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, list[dict[str, Any]]]:
@@ -77,29 +98,32 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
 <head>
   <meta charset=\"utf-8\" />
   <style>
-    @page {{ size: Letter landscape; margin: 0.4in; }}
-    body {{ font-family: Arial, sans-serif; font-size: 10px; color: #111827; }}
-    .page {{ page-break-after: always; position: relative; min-height: 7in; }}
+    @page {{ size: Letter landscape; margin: 0.35in; }}
+    body {{ font-family: Arial, sans-serif; font-size: 8.5px; line-height: 1.15; color: #111827; }}
+    .page {{ page-break-after: always; position: relative; min-height: 7.15in; }}
     .page:last-child {{ page-break-after: auto; }}
-    h1 {{ font-size: 18px; margin: 0 0 6px 0; border-bottom: 2px solid #0c4a6e; padding-bottom: 4px; }}
-    p {{ margin: 2px 0 8px 0; color: #334155; }}
-    table {{ width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; }}
-    th, td {{ border: 1px solid #d1d5db; padding: 4px; text-align: left; vertical-align: top; word-wrap: break-word; }}
+    h1 {{ font-size: 16px; margin: 0 0 4px 0; border-bottom: 2px solid #0c4a6e; padding-bottom: 3px; }}
+    p {{ margin: 2px 0 6px 0; color: #334155; }}
+    table {{ width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 8px; page-break-inside: auto; }}
+    thead {{ display: table-header-group; }}
+    tbody {{ display: table-row-group; }}
+    tr {{ page-break-inside: avoid; break-inside: avoid; }}
+    th, td {{ border: 1px solid #d1d5db; padding: 3px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: anywhere; }}
     th {{ background: #f1f5f9; }}
-    .page-number {{ position: absolute; bottom: 0; right: 0; font-size: 10px; color: #475569; }}
+    .page-number {{ position: absolute; bottom: 0; right: 0; font-size: 9px; color: #475569; }}
   </style>
 </head>
 <body>
-  {_render_section_pages('1', 'All Fund Families where QES is a client filing agent', 'Unique fund families with QES presence.', ['Fund Family', 'Fund Family', 'Fund Family'], section_1_rows)}
-  {_render_section_pages('2', 'All Fund Families where File Point appears', 'Unique fund families with File Point presence.', ['Fund Family', 'Fund Family', 'Fund Family'], section_2_rows)}
-  {_render_section_pages('3', 'Fund Families in Common: QES and EA', 'Families where both QES and EA file at least one fund.', ['Fund Family', 'Fund Family', 'Fund Family'], section_3_rows)}
-  {_render_section_pages('4', 'Fund Families in Common: File Point and EA', 'Families where both File Point and EA file at least one fund.', ['Fund Family', 'Fund Family', 'Fund Family'], section_4_rows)}
-  {_render_section_pages('5', 'Fund Families in Common: QES, EA, and File Point', 'Families where all three filing agents are present.', ['Fund Family', 'Fund Family', 'Fund Family'], section_5_rows)}
-  {_render_section_pages('6', 'QES + EA + File Point Common Families with Forms by Fund', 'Shows admin, forms each agent files, and whether each agent files each fund.', ['Fund Family', 'Fund', 'Admin(s)', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_6_rows, rows_per_page=16)}
-  {_render_section_pages('7', 'QES + EA Families with Forms by Fund', 'Shows admin, forms each agent files, and whether each agent files each fund.', ['Fund Family', 'Fund', 'Admin(s)', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_7_rows, rows_per_page=16)}
-  {_render_section_pages('8', 'File Point + EA Families with Forms by Fund', 'Shows admin, forms each agent files, and whether each agent files each fund.', ['Fund Family', 'Fund', 'Admin(s)', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_8_rows, rows_per_page=16)}
-  {_render_section_pages('9', 'Summary Table by Admin (Filing Agent Distribution)', 'Filing distribution and share by admin across EA, QES, FilePoint, and Other.', ['Administrator', 'Total Filings', 'EA Count', 'QES Count', 'FilePoint Count', 'Other Count', 'EA %', 'QES %', 'FilePoint %', 'Other %'], section_9_rows, rows_per_page=24)}
-  {_render_section_pages('10', 'Opportunity Table (EA Expansion / New / Defend)', 'Family-level opportunity flags, agent mix, and high-value filing indicators.', ['Administrator', 'Fund Family', 'EA Presence', 'Competitors Present', 'Agent Mix', 'Opportunity Type', '# Funds', '# High-Value Filings'], section_10_rows, rows_per_page=22)}
+  {_render_action_section_pages('1', 'All Fund Families where QES is a client filing agent', 'Unique fund families with QES presence.', ['Fund Family', 'Fund Family', 'Fund Family'], section_1_rows, rows_per_page=38)}
+  {_render_action_section_pages('2', 'All Fund Families where File Point appears', 'Unique fund families with File Point presence.', ['Fund Family', 'Fund Family', 'Fund Family'], section_2_rows, rows_per_page=38)}
+  {_render_action_section_pages('3', 'Fund Families in Common: QES and EA', 'Families where both QES and EA file at least one fund.', ['Fund Family', 'Fund Family', 'Fund Family'], section_3_rows, rows_per_page=38)}
+  {_render_action_section_pages('4', 'Fund Families in Common: File Point and EA', 'Families where both File Point and EA file at least one fund.', ['Fund Family', 'Fund Family', 'Fund Family'], section_4_rows, rows_per_page=38)}
+  {_render_action_section_pages('5', 'Fund Families in Common: QES, EA, and File Point', 'Families where all three filing agents are present.', ['Fund Family', 'Fund Family', 'Fund Family'], section_5_rows, rows_per_page=38)}
+  {_render_action_section_pages('6', 'QES + EA + File Point Common Families with Forms by Fund', 'Shows admin, forms each agent files, and whether each agent files each fund.', ['Fund Family', 'Fund', 'Admin(s)', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_6_rows, rows_per_page=13)}
+  {_render_action_section_pages('7', 'QES + EA Families with Forms by Fund', 'Shows admin, forms each agent files, and whether each agent files each fund.', ['Fund Family', 'Fund', 'Admin(s)', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_7_rows, rows_per_page=13)}
+  {_render_action_section_pages('8', 'File Point + EA Families with Forms by Fund', 'Shows admin, forms each agent files, and whether each agent files each fund.', ['Fund Family', 'Fund', 'Admin(s)', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_8_rows, rows_per_page=13)}
+  {_render_action_section_pages('9', 'Summary Table by Admin (Filing Agent Distribution)', 'Filing distribution and share by admin across EA, QES, FilePoint, and Other.', ['Administrator', 'Total Filings', 'EA Count', 'QES Count', 'FilePoint Count', 'Other Count', 'EA %', 'QES %', 'FilePoint %', 'Other %'], section_9_rows, rows_per_page=20)}
+  {_render_action_section_pages('10', 'Opportunity Table (EA Expansion / New / Defend)', 'Family-level opportunity flags, agent mix, and high-value filing indicators.', ['Administrator', 'Fund Family', 'EA Presence', 'Competitors Present', 'Agent Mix', 'Opportunity Type', '# Funds', '# High-Value Filings'], section_10_rows, rows_per_page=18)}
 </body>
 </html>
 """
