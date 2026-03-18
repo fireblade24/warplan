@@ -237,3 +237,47 @@ Outputs:
 - `output/ncen_multi_agent_fund_family_report_section11_opportunity.csv`
 - `output/ncen_multi_agent_fund_family_report_section11_pivot_admin_agent.csv`
 - `output/ncen_multi_agent_fund_family_report_section11_pivot_admin_form_agent.csv`
+
+
+## Action Plan QES/FilePoint Report (new)
+
+Focused action-plan report built from selected sections of the NCEN Multi-Agent Fund Family Report.
+
+Source:
+- `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+- Date window: filings from `2025-01-01` through `CURRENT_DATE()`
+
+What it does:
+- Section 1: all fund families where QES appears (3-column list)
+- Section 2: all fund families where File Point appears (3-column list)
+- Section 3: fund families in common between QES and EA (3-column list)
+- Section 4: fund families in common between File Point and EA (3-column list)
+- Section 5: fund families in common between QES, EA, and File Point (3-column list)
+- Section 6: QES+EA+File Point common families with fund-level admin, form lists, and agent presence flags
+- Section 7: QES+EA families with fund-level admin, form lists, and agent presence flags
+- Section 8: File Point+EA families with fund-level admin, form lists, and agent presence flags
+- Section 9: summary by admin with filing-agent distribution counts and share (`EA`, `QES`, `FilePoint`, `Other`)
+- Section 10: opportunity table by admin/family with EA presence, competitor mix, opportunity type, fund counts, and high-value filing counts
+- Every section restarts page numbering and prints `Page N of X` inside the section
+
+Files:
+- Runner: `src/action_plan_qes_filepoint.py`
+- Reused SQL logic: `sql/ncen_multi_agent_fund_family_report.sql`
+
+Run:
+```bash
+python src/action_plan_qes_filepoint.py
+```
+
+Optional:
+```bash
+python src/action_plan_qes_filepoint.py   --project-id <your-gcp-project>   --output output/action_plan_qes_filepoint.pdf
+```
+
+Outputs:
+- `output/action_plan_qes_filepoint.pdf`
+- `output/action_plan_qes_filepoint.csv`
+- `output/action_plan_qes_filepoint_summary_by_admin.csv`
+- `output/action_plan_qes_filepoint_opportunity.csv`
+- `output/action_plan_qes_filepoint_pivot_admin_agent.csv`
+- `output/action_plan_qes_filepoint_pivot_admin_form_agent.csv`
