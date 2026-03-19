@@ -246,6 +246,7 @@ Focused action-plan report built from selected sections of the NCEN Multi-Agent 
 Source:
 - `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
 - Date window: filings from `2025-01-01` through `CURRENT_DATE()`
+- Scope note: this Action Plan report is filtered to **known admins only** and excludes rows that only map to `(Unknown Admin)`
 
 What it does:
 - Section 1: all fund families where QES appears (3-column list)

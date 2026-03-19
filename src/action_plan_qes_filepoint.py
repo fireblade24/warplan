@@ -261,16 +261,29 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
     from weasyprint import HTML
 
     prepared = _prepare_rows(rows)
-    fund_rows = prepared["fund_rows"]
+    fund_rows = []
+    for row in prepared["fund_rows"]:
+        known_admins = [admin for admin in row["admins"] if admin and admin != "(Unknown Admin)"]
+        if not known_admins:
+            continue
+        row_copy = dict(row)
+        row_copy["admins"] = known_admins
+        fund_rows.append(row_copy)
 
-    section_1_rows = _format_three_column_list(prepared["families_qes"])
-    section_2_rows = _format_three_column_list(prepared["families_fp"])
-    section_3_rows = _format_three_column_list(prepared["families_qes_ea"])
-    section_4_rows = _format_three_column_list(prepared["families_fp_ea"])
-    section_5_rows = _format_three_column_list(prepared["families_qes_ea_fp"])
-    section_6_rows = _build_section_6_rows(fund_rows, set(prepared["families_qes_ea_fp"]))
-    section_7_rows = _build_section_6_rows(fund_rows, set(prepared["families_qes_ea"]))
-    section_8_rows = _build_section_6_rows(fund_rows, set(prepared["families_fp_ea"]))
+    families_qes = sorted({row["family"] for row in fund_rows if row["has_qes"]})
+    families_fp = sorted({row["family"] for row in fund_rows if row["has_fp"]})
+    families_qes_ea = sorted({row["family"] for row in fund_rows if row["has_qes"] and row["has_ea"]})
+    families_fp_ea = sorted({row["family"] for row in fund_rows if row["has_fp"] and row["has_ea"]})
+    families_qes_ea_fp = sorted({row["family"] for row in fund_rows if row["has_qes"] and row["has_ea"] and row["has_fp"]})
+
+    section_1_rows = _format_three_column_list(families_qes)
+    section_2_rows = _format_three_column_list(families_fp)
+    section_3_rows = _format_three_column_list(families_qes_ea)
+    section_4_rows = _format_three_column_list(families_fp_ea)
+    section_5_rows = _format_three_column_list(families_qes_ea_fp)
+    section_6_rows = _build_section_6_rows(fund_rows, set(families_qes_ea_fp))
+    section_7_rows = _build_section_6_rows(fund_rows, set(families_qes_ea))
+    section_8_rows = _build_section_6_rows(fund_rows, set(families_fp_ea))
 
     section_11 = _build_section_11_outputs(fund_rows)
     section_sales = _build_sales_relationship_outputs(fund_rows, sales_rows)
