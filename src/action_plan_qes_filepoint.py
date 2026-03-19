@@ -69,7 +69,7 @@ def query_sales_rows(project_id: str) -> list[dict[str, Any]]:
     raise RuntimeError("Unexpected bq output format. Expected JSON array.")
 
 
-def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def _build_sales_map(sales_rows: list[dict[str, Any]]) -> dict[str, set[str]]:
     sales_map: dict[str, set[str]] = {}
     for row in sales_rows:
         family = str(row.get("fund_family_name") or "").strip()
@@ -77,23 +77,29 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
         if not family or not sales_person:
             continue
         sales_map.setdefault(_normalize_name(family), set()).add(sales_person)
+    return sales_map
+
+
+def _lookup_sales_matches(family_name: str, fund_name: str, sales_map: dict[str, set[str]]) -> tuple[list[str], str]:
+    normalized_family = _normalize_name(family_name)
+    normalized_fund = _normalize_name(fund_name)
+    family_matches = sorted(sales_map.get(normalized_family, set()))
+    fund_matches = sorted(sales_map.get(normalized_fund, set()))
+    if family_matches:
+        return family_matches, "Fund Family"
+    if fund_matches:
+        return fund_matches, "Fund Name"
+    return [], ""
+
+
+def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    sales_map = _build_sales_map(sales_rows)
 
     relationship_rows: list[dict[str, Any]] = []
     action_rows: list[dict[str, Any]] = []
 
     for fr in sorted(fund_rows, key=lambda x: (x["family"], x["fund"])):
-        normalized_family = _normalize_name(fr["family"])
-        normalized_fund = _normalize_name(fr["fund"])
-        family_matches = sorted(sales_map.get(normalized_family, set()))
-        fund_matches = sorted(sales_map.get(normalized_fund, set()))
-
-        if family_matches:
-            sales_people = family_matches
-            match_source = "Fund Family"
-        else:
-            sales_people = fund_matches
-            match_source = "Fund Name"
-
+        sales_people, match_source = _lookup_sales_matches(fr["family"], fr["fund"], sales_map)
         if not sales_people:
             continue
 
@@ -152,7 +158,7 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
                     "Fund Family": fr["family"],
                     "Fund": fr["fund"],
                     "Reason": reason,
-                    "Form Types": available_form_list,
+                    "Form Types Available": available_form_list,
                 }
             )
 
@@ -160,6 +166,73 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
     relationship_rows.sort(key=lambda x: (x["Sales Person"], x["Administrator"], x["Fund Family"], x["Fund"]))
     action_rows.sort(key=lambda x: (x["Sales Person"], action_priority.get(x["Action Group"], 99), x["Administrator"], x["Fund Family"], x["Fund"]))
     return {"relationship": relationship_rows, "actions": action_rows}
+
+
+def _build_sales_new_opportunity_outputs(fund_rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sales_map = _build_sales_map(sales_rows)
+    existing_relationships: dict[tuple[str, str], set[str]] = {}
+    output_rows: list[dict[str, Any]] = []
+    seen_rows: set[tuple[str, str, str, str, str]] = set()
+
+    for fr in fund_rows:
+        sales_people, _match_source = _lookup_sales_matches(fr["family"], fr["fund"], sales_map)
+        if not sales_people or not fr["has_ea"]:
+            continue
+        current_item = f"{fr['family']} :: {fr['fund']}"
+        for admin in fr["admins"]:
+            for sales_person in sales_people:
+                existing_relationships.setdefault((sales_person, admin), set()).add(current_item)
+
+    for fr in sorted(fund_rows, key=lambda x: (x["family"], x["fund"])):
+        if fr["has_ea"] or not (fr["has_qes"] or fr["has_fp"]):
+            continue
+
+        competitor_agents = []
+        if fr["has_qes"]:
+            competitor_agents.append("QES")
+        if fr["has_fp"]:
+            competitor_agents.append("FilePoint")
+        competitors = ", ".join(competitor_agents) if competitor_agents else "None"
+        form_types_available = sorted(
+            {
+                *[f.strip() for f in fr["qes_forms"].split(",") if f.strip()],
+                *[f.strip() for f in fr["fp_forms"].split(",") if f.strip()],
+            }
+        )
+        form_type_available_list = ", ".join(form_types_available) or "-"
+
+        for admin in fr["admins"]:
+            for sales_person, _admin in sorted(existing_relationships):
+                if _admin != admin:
+                    continue
+                existing_items = sorted(existing_relationships[(sales_person, admin)])
+                if not existing_items:
+                    continue
+                row_key = (sales_person, admin, fr["family"], fr["fund"], "|".join(existing_items))
+                if row_key in seen_rows:
+                    continue
+                seen_rows.add(row_key)
+                output_rows.append(
+                    {
+                        "Sales Person": sales_person,
+                        "Administrator": admin,
+                        "Current EA Relationship": "; ".join(existing_items),
+                        "Related Opportunity Family": fr["family"],
+                        "Related Opportunity Fund": fr["fund"],
+                        "Competing Filer(s)": competitors,
+                        "Form Types Available": form_type_available_list,
+                    }
+                )
+
+    output_rows.sort(
+        key=lambda x: (
+            x["Sales Person"],
+            x["Administrator"],
+            x["Related Opportunity Family"],
+            x["Related Opportunity Fund"],
+        )
+    )
+    return output_rows
 
 
 def _render_action_section_pages(section_num: str, title: str, subtitle: str, headers: list[str], rows: list[list[str]], rows_per_page: int = 25) -> str:
@@ -199,6 +272,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
 
     section_11 = _build_section_11_outputs(fund_rows)
     section_sales = _build_sales_relationship_outputs(fund_rows, sales_rows)
+    section_sales_new_opportunity = _build_sales_new_opportunity_outputs(fund_rows, sales_rows)
     section_9_rows = [
         [
             r["Administrator"],
@@ -252,9 +326,21 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
             r["Fund Family"],
             r["Fund"],
             r["Reason"],
-            r["Form Types"],
+            r["Form Types Available"],
         ]
         for r in section_sales["actions"]
+    ]
+    section_11_new_opportunity_rows = [
+        [
+            r["Sales Person"],
+            r["Administrator"],
+            r["Current EA Relationship"],
+            r["Related Opportunity Family"],
+            r["Related Opportunity Fund"],
+            r["Competing Filer(s)"],
+            r["Form Types Available"],
+        ]
+        for r in section_sales_new_opportunity
     ]
     sales_people_for_actions = sorted({r["Sales Person"] for r in section_sales["actions"]})
     section_11_action_pages = []
@@ -268,7 +354,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
                 r["Fund Family"],
                 r["Fund"],
                 r["Reason"],
-                r["Form Types"],
+                r["Form Types Available"],
             ]
             for r in section_sales["actions"]
             if r["Sales Person"] == sales_person
@@ -277,8 +363,8 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
             _render_action_section_pages(
                 "11.2",
                 f"Sales Person Action List — {sales_person}",
-                "Action list for this sales person grouped into Expansion, Defend, and New. Form Types show the forms EA does not file yet, and reasons name the competing filer when present.",
-                ["Sales Person", "Action Group", "Match Source", "Administrator", "Fund Family", "Fund", "Reason", "Form Types"],
+                "Action list for this sales person grouped into Expansion, Defend, and New. Form Types Available show the forms EA does not file yet, and reasons name the competing filer when present.",
+                ["Sales Person", "Action Group", "Match Source", "Administrator", "Fund Family", "Fund", "Reason", "Form Types Available"],
                 salesperson_rows,
                 rows_per_page=15,
             )
@@ -318,6 +404,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
   {_render_action_section_pages('10', 'Opportunity Table (EA Expansion / New / Defend)', 'Family-level opportunity flags, agent mix, and high-value filing indicators.', ['Administrator', 'Fund Family', 'EA Presence', 'Competitors Present', 'Agent Mix', 'Opportunity Type', '# Funds', '# High-Value Filings'], section_10_rows, rows_per_page=18)}
   {_render_action_section_pages('11.1', 'Sales Person Relationship', 'Shows all sales-person matches using fund family first and fund name as fallback, plus admin/fund/agent opportunity context.', ['Sales Person', 'Match Source', 'Administrator', 'Fund Family', 'Fund', 'EA', 'QES', 'FilePoint', 'Opportunity', 'Form Types'], section_11_relationship_rows, rows_per_page=15)}
   {"".join(section_11_action_pages)}
+  {_render_action_section_pages('11.3', 'Same-Admin New Opportunity Assignment', 'Shows families/funds where EA is not present but QES and/or FilePoint are, assigned to the sales person who already has an EA relationship in the same admin group.', ['Sales Person', 'Administrator', 'Current EA Relationship', 'Related Opportunity Family', 'Related Opportunity Fund', 'Competing Filer(s)', 'Form Types Available'], section_11_new_opportunity_rows, rows_per_page=15)}
 </body>
 </html>
 """
@@ -338,6 +425,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
         {"section": "section_10_opportunity", "row_count": len(section_10_rows)},
         {"section": "section_11_1_sales_relationship", "row_count": len(section_11_relationship_rows)},
         {"section": "section_11_2_sales_action_list", "row_count": len(section_11_action_rows)},
+        {"section": "section_11_3_same_admin_new_opportunity", "row_count": len(section_11_new_opportunity_rows)},
     ]
     return {
         "summary": summary_rows,
@@ -347,6 +435,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
         "pivot_admin_form_agent": section_11["pivot_admin_form_agent"],
         "sales_relationship": section_sales["relationship"],
         "sales_actions": section_sales["actions"],
+        "sales_new_opportunity": section_sales_new_opportunity,
     }
 
 
@@ -378,6 +467,7 @@ def main() -> None:
     write_csv(sections["pivot_admin_form_agent"], output_base.with_name(output_base.name + "_pivot_admin_form_agent.csv"))
     write_csv(sections["sales_relationship"], output_base.with_name(output_base.name + "_sales_relationship.csv"))
     write_csv(sections["sales_actions"], output_base.with_name(output_base.name + "_sales_actions.csv"))
+    write_csv(sections["sales_new_opportunity"], output_base.with_name(output_base.name + "_sales_new_opportunity.csv"))
 
 
 if __name__ == "__main__":
