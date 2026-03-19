@@ -97,27 +97,36 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
         if not sales_people:
             continue
 
-        if fr["has_qes"] and fr["has_fp"]:
-            competitors = "QES + FilePoint"
-        elif fr["has_qes"]:
-            competitors = "QES"
-        elif fr["has_fp"]:
-            competitors = "FilePoint"
-        else:
-            competitors = "None"
+        competitor_agents = []
+        if fr["has_qes"]:
+            competitor_agents.append("QES")
+        if fr["has_fp"]:
+            competitor_agents.append("FilePoint")
+        competitors = ", ".join(competitor_agents) if competitor_agents else "None"
+
+        ea_forms = {f.strip() for f in fr["ea_forms"].split(",") if f.strip()}
+        non_ea_forms = sorted(
+            ({f.strip() for f in fr["qes_forms"].split(",") if f.strip()} | {f.strip() for f in fr["fp_forms"].split(",") if f.strip()}) - ea_forms
+        )
+        available_form_list = ", ".join(non_ea_forms) or "-"
+        relationship_form_types = sorted(
+            {
+                *[f.strip() for f in fr["qes_forms"].split(",") if f.strip()],
+                *[f.strip() for f in fr["ea_forms"].split(",") if f.strip()],
+                *[f.strip() for f in fr["fp_forms"].split(",") if f.strip()],
+            }
+        )
+        relationship_form_list = ", ".join(relationship_form_types) or "-"
 
         if fr["has_ea"] and competitors != "None":
             opportunity = "Expansion"
-            reason = "EA already has a relationship here, but another filing agent is also active."
+            reason = f"EA already has a relationship here, but {competitors} also file this relationship."
         elif fr["has_ea"]:
             opportunity = "Defend"
             reason = "EA is the only visible filing agent in this tracked universe and should be defended."
         else:
             opportunity = "New"
-            reason = "EA is not present but the family is active with another tracked filing agent."
-
-        form_types = sorted({*([f.strip() for f in fr["qes_forms"].split(",") if f.strip()]), *([f.strip() for f in fr["ea_forms"].split(",") if f.strip()]), *([f.strip() for f in fr["fp_forms"].split(",") if f.strip()])})
-        form_list = ", ".join(form_types) or "-"
+            reason = f"EA is not present but {competitors} file this relationship today."
 
         for sales_person in sales_people:
             relationship_rows.append(
@@ -131,7 +140,7 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
                     "QES Present": "Yes" if fr["has_qes"] else "No",
                     "FilePoint Present": "Yes" if fr["has_fp"] else "No",
                     "Opportunity": opportunity,
-                    "Form Types": form_list,
+                    "Form Types": relationship_form_list,
                 }
             )
             action_rows.append(
@@ -143,7 +152,7 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
                     "Fund Family": fr["family"],
                     "Fund": fr["fund"],
                     "Reason": reason,
-                    "Form Types": form_list,
+                    "Form Types": available_form_list,
                 }
             )
 
@@ -247,6 +256,33 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
         ]
         for r in section_sales["actions"]
     ]
+    sales_people_for_actions = sorted({r["Sales Person"] for r in section_sales["actions"]})
+    section_11_action_pages = []
+    for sales_person in sales_people_for_actions:
+        salesperson_rows = [
+            [
+                r["Sales Person"],
+                r["Action Group"],
+                r["Match Source"],
+                r["Administrator"],
+                r["Fund Family"],
+                r["Fund"],
+                r["Reason"],
+                r["Form Types"],
+            ]
+            for r in section_sales["actions"]
+            if r["Sales Person"] == sales_person
+        ]
+        section_11_action_pages.append(
+            _render_action_section_pages(
+                "11.2",
+                f"Sales Person Action List — {sales_person}",
+                "Action list for this sales person grouped into Expansion, Defend, and New. Form Types show the forms EA does not file yet, and reasons name the competing filer when present.",
+                ["Sales Person", "Action Group", "Match Source", "Administrator", "Fund Family", "Fund", "Reason", "Form Types"],
+                salesperson_rows,
+                rows_per_page=15,
+            )
+        )
 
     html_doc = f"""
 <!doctype html>
@@ -281,7 +317,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
   {_render_action_section_pages('9', 'Summary Table by Admin (Filing Agent Distribution)', 'Filing distribution and share by admin across EA, QES, FilePoint, and Other.', ['Administrator', 'Total Filings', 'EA Count', 'QES Count', 'FilePoint Count', 'Other Count', 'EA %', 'QES %', 'FilePoint %', 'Other %'], section_9_rows, rows_per_page=20)}
   {_render_action_section_pages('10', 'Opportunity Table (EA Expansion / New / Defend)', 'Family-level opportunity flags, agent mix, and high-value filing indicators.', ['Administrator', 'Fund Family', 'EA Presence', 'Competitors Present', 'Agent Mix', 'Opportunity Type', '# Funds', '# High-Value Filings'], section_10_rows, rows_per_page=18)}
   {_render_action_section_pages('11.1', 'Sales Person Relationship', 'Shows all sales-person matches using fund family first and fund name as fallback, plus admin/fund/agent opportunity context.', ['Sales Person', 'Match Source', 'Administrator', 'Fund Family', 'Fund', 'EA', 'QES', 'FilePoint', 'Opportunity', 'Form Types'], section_11_relationship_rows, rows_per_page=15)}
-  {_render_action_section_pages('11.2', 'Sales Person Action List', 'Action list grouped by sales person and divided into Expansion, Defend, and New using all family/fund sales matches.', ['Sales Person', 'Action Group', 'Match Source', 'Administrator', 'Fund Family', 'Fund', 'Reason', 'Form Types'], section_11_action_rows, rows_per_page=15)}
+  {"".join(section_11_action_pages)}
 </body>
 </html>
 """
