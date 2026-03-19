@@ -157,6 +157,7 @@ Brand-new report to map which administrators have the largest fund workload and 
 
 Source:
 - `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+- Date window: filings from `2025-01-01` through `CURRENT_DATE()`
 
 What it does:
 - rolls up by admin
@@ -184,3 +185,106 @@ python src/ncen_admin_workload_report.py \
 Outputs:
 - `output/ncen_admin_workload_report.pdf`
 - `output/ncen_admin_workload_report.csv`
+
+## NCEN Multi-Agent Fund Family Report (new)
+
+New multi-section report requested to compare QES, Edgar Agents (EA), and File Point coverage at fund-family, fund, admin, and adviser levels.
+
+Source:
+- `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+- Date window: filings from `2025-01-01` through `CURRENT_DATE()`
+
+What it does:
+- Section 1: all fund families where QES appears (3-column list)
+- Section 2: all fund families where File Point appears (3-column list)
+- Section 3: fund families in common between QES and EA (3-column list)
+- Section 4: fund families in common between File Point and EA (3-column list)
+- Section 5: fund families in common between QES, EA, and File Point (3-column list)
+- Section 6a: common QES+EA+File Point families with fund-level admin, form lists, and agent presence flags
+- Section 6b: QES+EA families with fund-level admin, form lists, and agent presence flags
+- Section 6c: File Point+EA families with fund-level admin, form lists, and agent presence flags
+- Section 7: all admins with counts of distinct funds worked by QES, EA, and File Point
+- Section 8: all advisers with counts of distinct funds worked by QES, EA, and File Point
+- Section 9: all admins with exact fund list and QES/EA/File Point flags per fund
+- Section 10: all advisers with exact fund list and QES/EA/File Point flags per fund
+- Section 11.1: hierarchical clean table (`Admin -> Fund Family -> Fund -> Form Type -> Filing Agent`)
+- Section 11.2: summary by admin with filing-agent distribution counts and share (`EA`, `QES`, `FilePoint`, `Other`)
+- Section 11.3: opportunity table by admin/family with EA presence, competitor mix, opportunity type, fund counts, and high-value filing counts
+- Every section restarts page numbering and prints `Page N of X` inside the section
+- Agent normalization includes `QES`, `EA`, `FilePoint`, `DFIN` aliases, and `Other`
+
+Files:
+- SQL logic: `sql/ncen_multi_agent_fund_family_report.sql`
+- Runner: `src/ncen_multi_agent_fund_family_report.py`
+
+Run:
+```bash
+python src/ncen_multi_agent_fund_family_report.py
+```
+
+Optional:
+```bash
+python src/ncen_multi_agent_fund_family_report.py \
+  --project-id <your-gcp-project> \
+  --output output/ncen_multi_agent_fund_family_report.pdf
+```
+
+Outputs:
+- `output/ncen_multi_agent_fund_family_report.pdf`
+- `output/ncen_multi_agent_fund_family_report.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_clean.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_summary_by_admin.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_opportunity.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_pivot_admin_agent.csv`
+- `output/ncen_multi_agent_fund_family_report_section11_pivot_admin_form_agent.csv`
+
+
+## Action Plan QES/FilePoint Report (new)
+
+Focused action-plan report built from selected sections of the NCEN Multi-Agent Fund Family Report.
+
+Source:
+- `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+- Date window: filings from `2025-01-01` through `CURRENT_DATE()`
+- Scope note: this Action Plan report is filtered to **known admins only** and excludes rows that only map to `(Unknown Admin)`
+
+What it does:
+- Section 1: all fund families where QES appears (3-column list)
+- Section 2: all fund families where File Point appears (3-column list)
+- Section 3: fund families in common between QES and EA (3-column list)
+- Section 4: fund families in common between File Point and EA (3-column list)
+- Section 5: fund families in common between QES, EA, and File Point (3-column list)
+- Section 6: QES+EA+File Point common families with fund-level admin, form lists, and agent presence flags
+- Section 7: QES+EA families with fund-level admin, form lists, and agent presence flags
+- Section 8: File Point+EA families with fund-level admin, form lists, and agent presence flags
+- Section 9: summary by admin with filing-agent distribution counts and share (`EA`, `QES`, `FilePoint`, `Other`)
+- Section 10: opportunity table by admin/family with EA presence, competitor mix, opportunity type, fund counts, and high-value filing counts
+- Section 11.1: sales person relationship table using `sec-edgar-ralph.warplan.client_list`, matching first on fund family and then falling back to fund name, while staying inside the same QES/FilePoint/EA universe; legacy sales assignments are shown as `Jordan Slotnick`
+- Section 11.2: sales person action list grouped into `Expansion`, `Defend`, and `New`, broken into a separate page section for each sales person, with reasons naming the competing filer and `Form Types Available` limited to the forms EA does not file yet after excluding out-of-scope forms (`SCHEDULE 13G`, `SCHEDULE 13D`, `SCHEDULE 13G/A`, `SCHEDULE 13D/A`, and Forms `3`/`4`/`5` plus `/A` variants); qualifying accounts still remain in the section even when those excluded documents are present
+- Section 11.3: same-admin new-opportunity assignment table, broken into a separate page section for each sales person, showing families/funds where EA is not present but QES and/or FilePoint are, assigned to the sales person who already has an EA relationship in that admin group; funds with `NPORT-P` or `NPORT-P/A` are excluded from this opportunity list, and the same out-of-scope Schedule 13 / Forms 3-4-5 set is also removed from `Form Types Available` without dropping otherwise-qualifying account relationships
+- Every section restarts page numbering and prints `Page N of X` inside the section
+
+Files:
+- Runner: `src/action_plan_qes_filepoint.py`
+- Reused SQL logic: `sql/ncen_multi_agent_fund_family_report.sql`
+
+Run:
+```bash
+python src/action_plan_qes_filepoint.py
+```
+
+Optional:
+```bash
+python src/action_plan_qes_filepoint.py   --project-id <your-gcp-project>   --output output/action_plan_qes_filepoint.pdf
+```
+
+Outputs:
+- `output/action_plan_qes_filepoint.pdf`
+- `output/action_plan_qes_filepoint.csv`
+- `output/action_plan_qes_filepoint_summary_by_admin.csv`
+- `output/action_plan_qes_filepoint_opportunity.csv`
+- `output/action_plan_qes_filepoint_pivot_admin_agent.csv`
+- `output/action_plan_qes_filepoint_pivot_admin_form_agent.csv`
+- `output/action_plan_qes_filepoint_sales_relationship.csv`
+- `output/action_plan_qes_filepoint_sales_actions.csv`
+- `output/action_plan_qes_filepoint_sales_new_opportunity.csv`
