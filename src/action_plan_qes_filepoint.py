@@ -199,6 +199,8 @@ def _build_sales_new_opportunity_outputs(fund_rows: list[dict[str, Any]], sales_
                 *[f.strip() for f in fr["fp_forms"].split(",") if f.strip()],
             }
         )
+        if {"NPORT-P", "NPORT-P/A"} & set(form_types_available):
+            continue
         form_type_available_list = ", ".join(form_types_available) or "-"
 
         for admin in fr["admins"]:
@@ -369,6 +371,32 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
                 rows_per_page=15,
             )
         )
+    sales_people_for_new_opportunity = sorted({r["Sales Person"] for r in section_sales_new_opportunity})
+    section_11_new_opportunity_pages = []
+    for sales_person in sales_people_for_new_opportunity:
+        salesperson_rows = [
+            [
+                r["Sales Person"],
+                r["Administrator"],
+                r["Current EA Relationship"],
+                r["Related Opportunity Family"],
+                r["Related Opportunity Fund"],
+                r["Competing Filer(s)"],
+                r["Form Types Available"],
+            ]
+            for r in section_sales_new_opportunity
+            if r["Sales Person"] == sales_person
+        ]
+        section_11_new_opportunity_pages.append(
+            _render_action_section_pages(
+                "11.3",
+                f"Same-Admin New Opportunity Assignment — {sales_person}",
+                "New-opportunity assignments for this sales person. Funds with NPORT-P or NPORT-P/A are excluded because they are not EA opportunity targets.",
+                ["Sales Person", "Administrator", "Current EA Relationship", "Related Opportunity Family", "Related Opportunity Fund", "Competing Filer(s)", "Form Types Available"],
+                salesperson_rows,
+                rows_per_page=15,
+            )
+        )
 
     html_doc = f"""
 <!doctype html>
@@ -404,7 +432,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
   {_render_action_section_pages('10', 'Opportunity Table (EA Expansion / New / Defend)', 'Family-level opportunity flags, agent mix, and high-value filing indicators.', ['Administrator', 'Fund Family', 'EA Presence', 'Competitors Present', 'Agent Mix', 'Opportunity Type', '# Funds', '# High-Value Filings'], section_10_rows, rows_per_page=18)}
   {_render_action_section_pages('11.1', 'Sales Person Relationship', 'Shows all sales-person matches using fund family first and fund name as fallback, plus admin/fund/agent opportunity context.', ['Sales Person', 'Match Source', 'Administrator', 'Fund Family', 'Fund', 'EA', 'QES', 'FilePoint', 'Opportunity', 'Form Types'], section_11_relationship_rows, rows_per_page=15)}
   {"".join(section_11_action_pages)}
-  {_render_action_section_pages('11.3', 'Same-Admin New Opportunity Assignment', 'Shows families/funds where EA is not present but QES and/or FilePoint are, assigned to the sales person who already has an EA relationship in the same admin group.', ['Sales Person', 'Administrator', 'Current EA Relationship', 'Related Opportunity Family', 'Related Opportunity Fund', 'Competing Filer(s)', 'Form Types Available'], section_11_new_opportunity_rows, rows_per_page=15)}
+  {"".join(section_11_new_opportunity_pages)}
 </body>
 </html>
 """
