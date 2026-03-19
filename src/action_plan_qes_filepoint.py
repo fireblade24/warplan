@@ -83,7 +83,17 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
 
     for fr in sorted(fund_rows, key=lambda x: (x["family"], x["fund"])):
         normalized_family = _normalize_name(fr["family"])
-        sales_people = sorted(sales_map.get(normalized_family, set()))
+        normalized_fund = _normalize_name(fr["fund"])
+        family_matches = sorted(sales_map.get(normalized_family, set()))
+        fund_matches = sorted(sales_map.get(normalized_fund, set()))
+
+        if family_matches:
+            sales_people = family_matches
+            match_source = "Fund Family"
+        else:
+            sales_people = fund_matches
+            match_source = "Fund Name"
+
         if not sales_people:
             continue
 
@@ -113,6 +123,7 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
             relationship_rows.append(
                 {
                     "Sales Person": sales_person,
+                    "Match Source": match_source,
                     "Administrator": "; ".join(fr["admins"]) or "-",
                     "Fund Family": fr["family"],
                     "Fund": fr["fund"],
@@ -127,6 +138,7 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
                 {
                     "Sales Person": sales_person,
                     "Action Group": opportunity,
+                    "Match Source": match_source,
                     "Administrator": "; ".join(fr["admins"]) or "-",
                     "Fund Family": fr["family"],
                     "Fund": fr["fund"],
@@ -210,6 +222,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
     section_11_relationship_rows = [
         [
             r["Sales Person"],
+            r["Match Source"],
             r["Administrator"],
             r["Fund Family"],
             r["Fund"],
@@ -225,6 +238,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
         [
             r["Sales Person"],
             r["Action Group"],
+            r["Match Source"],
             r["Administrator"],
             r["Fund Family"],
             r["Fund"],
@@ -266,8 +280,8 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
   {_render_action_section_pages('8', 'File Point + EA Families with Forms by Fund', 'Shows admin, forms each agent files, and whether each agent files each fund.', ['Fund Family', 'Fund', 'Admin(s)', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_8_rows, rows_per_page=13)}
   {_render_action_section_pages('9', 'Summary Table by Admin (Filing Agent Distribution)', 'Filing distribution and share by admin across EA, QES, FilePoint, and Other.', ['Administrator', 'Total Filings', 'EA Count', 'QES Count', 'FilePoint Count', 'Other Count', 'EA %', 'QES %', 'FilePoint %', 'Other %'], section_9_rows, rows_per_page=20)}
   {_render_action_section_pages('10', 'Opportunity Table (EA Expansion / New / Defend)', 'Family-level opportunity flags, agent mix, and high-value filing indicators.', ['Administrator', 'Fund Family', 'EA Presence', 'Competitors Present', 'Agent Mix', 'Opportunity Type', '# Funds', '# High-Value Filings'], section_10_rows, rows_per_page=18)}
-  {_render_action_section_pages('11.1', 'Sales Person Relationship', 'Shows the relationship between sales person, admin, fund family, fund, and EA/QES/FilePoint opportunity context.', ['Sales Person', 'Administrator', 'Fund Family', 'Fund', 'EA', 'QES', 'FilePoint', 'Opportunity', 'Form Types'], section_11_relationship_rows, rows_per_page=16)}
-  {_render_action_section_pages('11.2', 'Sales Person Action List', 'Action list grouped by sales person and divided into Expansion, Defend, and New based on current admin/family relationships.', ['Sales Person', 'Action Group', 'Administrator', 'Fund Family', 'Fund', 'Reason', 'Form Types'], section_11_action_rows, rows_per_page=16)}
+  {_render_action_section_pages('11.1', 'Sales Person Relationship', 'Shows all sales-person matches using fund family first and fund name as fallback, plus admin/fund/agent opportunity context.', ['Sales Person', 'Match Source', 'Administrator', 'Fund Family', 'Fund', 'EA', 'QES', 'FilePoint', 'Opportunity', 'Form Types'], section_11_relationship_rows, rows_per_page=15)}
+  {_render_action_section_pages('11.2', 'Sales Person Action List', 'Action list grouped by sales person and divided into Expansion, Defend, and New using all family/fund sales matches.', ['Sales Person', 'Action Group', 'Match Source', 'Administrator', 'Fund Family', 'Fund', 'Reason', 'Form Types'], section_11_action_rows, rows_per_page=15)}
 </body>
 </html>
 """

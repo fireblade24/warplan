@@ -258,8 +258,8 @@ What it does:
 - Section 8: File Point+EA families with fund-level admin, form lists, and agent presence flags
 - Section 9: summary by admin with filing-agent distribution counts and share (`EA`, `QES`, `FilePoint`, `Other`)
 - Section 10: opportunity table by admin/family with EA presence, competitor mix, opportunity type, fund counts, and high-value filing counts
-- Section 11.1: sales person relationship table using `sec-edgar-ralph.warplan.client_list` mapped to the same QES/FilePoint/EA family universe
-- Section 11.2: sales person action list grouped into `Expansion`, `Defend`, and `New` with reasons and form types
+- Section 11.1: sales person relationship table using `sec-edgar-ralph.warplan.client_list`, matching first on fund family and then falling back to fund name, while staying inside the same QES/FilePoint/EA universe
+- Section 11.2: sales person action list grouped into `Expansion`, `Defend`, and `New` with reasons, form types, and all matching sales assignments
 - Every section restarts page numbering and prints `Page N of X` inside the section
 
 Files:
