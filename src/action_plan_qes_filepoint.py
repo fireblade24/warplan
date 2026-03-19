@@ -27,6 +27,24 @@ from ncen_multi_agent_fund_family_report import (
 )
 
 
+EXCLUDED_OUT_OF_SCOPE_FORMS = {
+    "SCHEDULE 13G",
+    "SCHEDULE 13D",
+    "SCHEDULE 13G/A",
+    "SCHEDULE 13D/A",
+    "4",
+    "3",
+    "5",
+    "4/A",
+    "3/A",
+    "5/A",
+}
+
+SALES_PERSON_RENAMES = {
+    "Steve Yakubov": "Jordan Slotnick",
+}
+
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -36,6 +54,29 @@ def _normalize_name(value: str) -> str:
     text = re.sub(r"\b(FUND|FUNDS|TRUST|PORTFOLIO|PORTFOLIOS|SERIES|INC|LLC|LTD|PLC|CORP|CORPORATION|COMPANY|CO)\b", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+
+
+def _rename_sales_person(value: str) -> str:
+    cleaned = str(value or "").strip()
+    return SALES_PERSON_RENAMES.get(cleaned, cleaned)
+
+
+def _filtered_available_forms(*form_values: str) -> list[str]:
+    available_forms = {form.strip() for value in form_values for form in value.split(",") if form.strip()}
+    return sorted(form for form in available_forms if form.upper() not in EXCLUDED_OUT_OF_SCOPE_FORMS)
+
+
+def _visible_competitors(fr: dict[str, Any], available_forms: list[str]) -> list[str]:
+    competitors = []
+    qes_available = {form.strip() for form in fr["qes_forms"].split(",") if form.strip() and form.strip().upper() not in EXCLUDED_OUT_OF_SCOPE_FORMS}
+    fp_available = {form.strip() for form in fr["fp_forms"].split(",") if form.strip() and form.strip().upper() not in EXCLUDED_OUT_OF_SCOPE_FORMS}
+    if fr["has_qes"] and qes_available & set(available_forms):
+        competitors.append("QES")
+    if fr["has_fp"] and fp_available & set(available_forms):
+        competitors.append("FilePoint")
+    return competitors
 
 
 def query_sales_rows(project_id: str) -> list[dict[str, Any]]:
@@ -73,7 +114,7 @@ def _build_sales_map(sales_rows: list[dict[str, Any]]) -> dict[str, set[str]]:
     sales_map: dict[str, set[str]] = {}
     for row in sales_rows:
         family = str(row.get("fund_family_name") or "").strip()
-        sales_person = str(row.get("sales_person") or "").strip()
+        sales_person = _rename_sales_person(str(row.get("sales_person") or "").strip())
         if not family or not sales_person:
             continue
         sales_map.setdefault(_normalize_name(family), set()).add(sales_person)
@@ -103,17 +144,13 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
         if not sales_people:
             continue
 
-        competitor_agents = []
-        if fr["has_qes"]:
-            competitor_agents.append("QES")
-        if fr["has_fp"]:
-            competitor_agents.append("FilePoint")
+        ea_forms_upper = {f.strip().upper() for f in fr["ea_forms"].split(",") if f.strip()}
+        non_ea_forms = [
+            form for form in _filtered_available_forms(fr["qes_forms"], fr["fp_forms"])
+            if form.upper() not in ea_forms_upper
+        ]
+        competitor_agents = _visible_competitors(fr, non_ea_forms)
         competitors = ", ".join(competitor_agents) if competitor_agents else "None"
-
-        ea_forms = {f.strip() for f in fr["ea_forms"].split(",") if f.strip()}
-        non_ea_forms = sorted(
-            ({f.strip() for f in fr["qes_forms"].split(",") if f.strip()} | {f.strip() for f in fr["fp_forms"].split(",") if f.strip()}) - ea_forms
-        )
         available_form_list = ", ".join(non_ea_forms) or "-"
         relationship_form_types = sorted(
             {
@@ -149,18 +186,19 @@ def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_row
                     "Form Types": relationship_form_list,
                 }
             )
-            action_rows.append(
-                {
-                    "Sales Person": sales_person,
-                    "Action Group": opportunity,
-                    "Match Source": match_source,
-                    "Administrator": "; ".join(fr["admins"]) or "-",
-                    "Fund Family": fr["family"],
-                    "Fund": fr["fund"],
-                    "Reason": reason,
-                    "Form Types Available": available_form_list,
-                }
-            )
+            if available_form_list != "-":
+                action_rows.append(
+                    {
+                        "Sales Person": sales_person,
+                        "Action Group": opportunity,
+                        "Match Source": match_source,
+                        "Administrator": "; ".join(fr["admins"]) or "-",
+                        "Fund Family": fr["family"],
+                        "Fund": fr["fund"],
+                        "Reason": reason,
+                        "Form Types Available": available_form_list,
+                    }
+                )
 
     action_priority = {"Expansion": 0, "Defend": 1, "New": 2}
     relationship_rows.sort(key=lambda x: (x["Sales Person"], x["Administrator"], x["Fund Family"], x["Fund"]))
@@ -187,21 +225,14 @@ def _build_sales_new_opportunity_outputs(fund_rows: list[dict[str, Any]], sales_
         if fr["has_ea"] or not (fr["has_qes"] or fr["has_fp"]):
             continue
 
-        competitor_agents = []
-        if fr["has_qes"]:
-            competitor_agents.append("QES")
-        if fr["has_fp"]:
-            competitor_agents.append("FilePoint")
-        competitors = ", ".join(competitor_agents) if competitor_agents else "None"
-        form_types_available = sorted(
-            {
-                *[f.strip() for f in fr["qes_forms"].split(",") if f.strip()],
-                *[f.strip() for f in fr["fp_forms"].split(",") if f.strip()],
-            }
-        )
-        if {"NPORT-P", "NPORT-P/A"} & set(form_types_available):
+        form_types_available = _filtered_available_forms(fr["qes_forms"], fr["fp_forms"])
+        if {"NPORT-P", "NPORT-P/A"} & {form.upper() for form in form_types_available}:
             continue
-        form_type_available_list = ", ".join(form_types_available) or "-"
+        if not form_types_available:
+            continue
+        competitor_agents = _visible_competitors(fr, form_types_available)
+        competitors = ", ".join(competitor_agents) if competitor_agents else "None"
+        form_type_available_list = ", ".join(form_types_available)
 
         for admin in fr["admins"]:
             for sales_person, _admin in sorted(existing_relationships):
@@ -378,7 +409,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
             _render_action_section_pages(
                 "11.2",
                 f"Sales Person Action List — {sales_person}",
-                "Action list for this sales person grouped into Expansion, Defend, and New. Form Types Available show the forms EA does not file yet, and reasons name the competing filer when present.",
+                "Action list for this sales person grouped into Expansion, Defend, and New. Form Types Available exclude out-of-scope forms (Schedule 13G/13D series and Forms 3/4/5), and reasons name the competing filer when present.",
                 ["Sales Person", "Action Group", "Match Source", "Administrator", "Fund Family", "Fund", "Reason", "Form Types Available"],
                 salesperson_rows,
                 rows_per_page=15,
@@ -404,7 +435,7 @@ def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], 
             _render_action_section_pages(
                 "11.3",
                 f"Same-Admin New Opportunity Assignment — {sales_person}",
-                "New-opportunity assignments for this sales person. Funds with NPORT-P or NPORT-P/A are excluded because they are not EA opportunity targets.",
+                "New-opportunity assignments for this sales person. Funds with NPORT-P or NPORT-P/A are excluded, and Form Types Available also excludes out-of-scope forms (Schedule 13G/13D series and Forms 3/4/5).",
                 ["Sales Person", "Administrator", "Current EA Relationship", "Related Opportunity Family", "Related Opportunity Fund", "Competing Filer(s)", "Form Types Available"],
                 salesperson_rows,
                 rows_per_page=15,

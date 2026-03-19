@@ -259,9 +259,9 @@ What it does:
 - Section 8: File Point+EA families with fund-level admin, form lists, and agent presence flags
 - Section 9: summary by admin with filing-agent distribution counts and share (`EA`, `QES`, `FilePoint`, `Other`)
 - Section 10: opportunity table by admin/family with EA presence, competitor mix, opportunity type, fund counts, and high-value filing counts
-- Section 11.1: sales person relationship table using `sec-edgar-ralph.warplan.client_list`, matching first on fund family and then falling back to fund name, while staying inside the same QES/FilePoint/EA universe
-- Section 11.2: sales person action list grouped into `Expansion`, `Defend`, and `New`, broken into a separate page section for each sales person, with reasons naming the competing filer and `Form Types Available` limited to the forms EA does not file yet
-- Section 11.3: same-admin new-opportunity assignment table, broken into a separate page section for each sales person, showing families/funds where EA is not present but QES and/or FilePoint are, assigned to the sales person who already has an EA relationship in that admin group; funds with `NPORT-P` or `NPORT-P/A` are excluded from this opportunity list
+- Section 11.1: sales person relationship table using `sec-edgar-ralph.warplan.client_list`, matching first on fund family and then falling back to fund name, while staying inside the same QES/FilePoint/EA universe; legacy sales assignments are shown as `Jordan Slotnick`
+- Section 11.2: sales person action list grouped into `Expansion`, `Defend`, and `New`, broken into a separate page section for each sales person, with reasons naming the competing filer and `Form Types Available` limited to the forms EA does not file yet after excluding out-of-scope forms (`SCHEDULE 13G`, `SCHEDULE 13D`, `SCHEDULE 13G/A`, `SCHEDULE 13D/A`, and Forms `3`/`4`/`5` plus `/A` variants)
+- Section 11.3: same-admin new-opportunity assignment table, broken into a separate page section for each sales person, showing families/funds where EA is not present but QES and/or FilePoint are, assigned to the sales person who already has an EA relationship in that admin group; funds with `NPORT-P` or `NPORT-P/A` are excluded from this opportunity list, and the same out-of-scope Schedule 13 / Forms 3-4-5 set is also removed from `Form Types Available`
 - Every section restarts page numbering and prints `Page N of X` inside the section
 
 Files:
