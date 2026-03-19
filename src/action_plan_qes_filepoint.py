@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +30,117 @@ from ncen_multi_agent_fund_family_report import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _normalize_name(value: str) -> str:
+    text = (value or "").upper()
+    text = re.sub(r"[^A-Z0-9 ]+", " ", text)
+    text = re.sub(r"\b(FUND|FUNDS|TRUST|PORTFOLIO|PORTFOLIOS|SERIES|INC|LLC|LTD|PLC|CORP|CORPORATION|COMPANY|CO)\b", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def query_sales_rows(project_id: str) -> list[dict[str, Any]]:
+    sql = """
+    SELECT
+      string_field_0 AS fund_family_name,
+      string_field_1 AS sales_person
+    FROM `sec-edgar-ralph.warplan.client_list`
+    WHERE TRIM(COALESCE(string_field_0, '')) <> ''
+      AND TRIM(COALESCE(string_field_1, '')) <> ''
+    """
+    cmd = [
+        "bq",
+        "query",
+        "--project_id",
+        project_id,
+        "--use_legacy_sql=false",
+        "--format=prettyjson",
+        "--max_rows=1000000",
+    ]
+    result = subprocess.run(cmd, input=sql, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "No output from bq CLI"
+        raise RuntimeError(f"bq query failed (exit {result.returncode}): {detail}")
+    payload = result.stdout.strip()
+    if not payload:
+        return []
+    data = json.loads(payload)
+    if isinstance(data, list):
+        return [dict(row) for row in data]
+    raise RuntimeError("Unexpected bq output format. Expected JSON array.")
+
+
+def _build_sales_relationship_outputs(fund_rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    sales_map: dict[str, set[str]] = {}
+    for row in sales_rows:
+        family = str(row.get("fund_family_name") or "").strip()
+        sales_person = str(row.get("sales_person") or "").strip()
+        if not family or not sales_person:
+            continue
+        sales_map.setdefault(_normalize_name(family), set()).add(sales_person)
+
+    relationship_rows: list[dict[str, Any]] = []
+    action_rows: list[dict[str, Any]] = []
+
+    for fr in sorted(fund_rows, key=lambda x: (x["family"], x["fund"])):
+        normalized_family = _normalize_name(fr["family"])
+        sales_people = sorted(sales_map.get(normalized_family, set()))
+        if not sales_people:
+            continue
+
+        if fr["has_qes"] and fr["has_fp"]:
+            competitors = "QES + FilePoint"
+        elif fr["has_qes"]:
+            competitors = "QES"
+        elif fr["has_fp"]:
+            competitors = "FilePoint"
+        else:
+            competitors = "None"
+
+        if fr["has_ea"] and competitors != "None":
+            opportunity = "Expansion"
+            reason = "EA already has a relationship here, but another filing agent is also active."
+        elif fr["has_ea"]:
+            opportunity = "Defend"
+            reason = "EA is the only visible filing agent in this tracked universe and should be defended."
+        else:
+            opportunity = "New"
+            reason = "EA is not present but the family is active with another tracked filing agent."
+
+        form_types = sorted({*([f.strip() for f in fr["qes_forms"].split(",") if f.strip()]), *([f.strip() for f in fr["ea_forms"].split(",") if f.strip()]), *([f.strip() for f in fr["fp_forms"].split(",") if f.strip()])})
+        form_list = ", ".join(form_types) or "-"
+
+        for sales_person in sales_people:
+            relationship_rows.append(
+                {
+                    "Sales Person": sales_person,
+                    "Administrator": "; ".join(fr["admins"]) or "-",
+                    "Fund Family": fr["family"],
+                    "Fund": fr["fund"],
+                    "EA Present": "Yes" if fr["has_ea"] else "No",
+                    "QES Present": "Yes" if fr["has_qes"] else "No",
+                    "FilePoint Present": "Yes" if fr["has_fp"] else "No",
+                    "Opportunity": opportunity,
+                    "Form Types": form_list,
+                }
+            )
+            action_rows.append(
+                {
+                    "Sales Person": sales_person,
+                    "Action Group": opportunity,
+                    "Administrator": "; ".join(fr["admins"]) or "-",
+                    "Fund Family": fr["family"],
+                    "Fund": fr["fund"],
+                    "Reason": reason,
+                    "Form Types": form_list,
+                }
+            )
+
+    action_priority = {"Expansion": 0, "Defend": 1, "New": 2}
+    relationship_rows.sort(key=lambda x: (x["Sales Person"], x["Administrator"], x["Fund Family"], x["Fund"]))
+    action_rows.sort(key=lambda x: (x["Sales Person"], action_priority.get(x["Action Group"], 99), x["Administrator"], x["Fund Family"], x["Fund"]))
+    return {"relationship": relationship_rows, "actions": action_rows}
+
+
 def _render_action_section_pages(section_num: str, title: str, subtitle: str, headers: list[str], rows: list[list[str]], rows_per_page: int = 25) -> str:
     chunks = _chunked(rows, rows_per_page)
     total_pages = len(chunks)
@@ -47,7 +161,7 @@ def _render_action_section_pages(section_num: str, title: str, subtitle: str, he
     return "\n".join(pages)
 
 
-def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, list[dict[str, Any]]]:
+def render_report(rows: list[dict[str, Any]], sales_rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, list[dict[str, Any]]]:
     from weasyprint import HTML
 
     prepared = _prepare_rows(rows)
@@ -63,6 +177,7 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
     section_8_rows = _build_section_6_rows(fund_rows, set(prepared["families_fp_ea"]))
 
     section_11 = _build_section_11_outputs(fund_rows)
+    section_sales = _build_sales_relationship_outputs(fund_rows, sales_rows)
     section_9_rows = [
         [
             r["Administrator"],
@@ -90,6 +205,33 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
             str(r["Number of High-Value Filings"]),
         ]
         for r in section_11["opportunity"]
+    ]
+
+    section_11_relationship_rows = [
+        [
+            r["Sales Person"],
+            r["Administrator"],
+            r["Fund Family"],
+            r["Fund"],
+            r["EA Present"],
+            r["QES Present"],
+            r["FilePoint Present"],
+            r["Opportunity"],
+            r["Form Types"],
+        ]
+        for r in section_sales["relationship"]
+    ]
+    section_11_action_rows = [
+        [
+            r["Sales Person"],
+            r["Action Group"],
+            r["Administrator"],
+            r["Fund Family"],
+            r["Fund"],
+            r["Reason"],
+            r["Form Types"],
+        ]
+        for r in section_sales["actions"]
     ]
 
     html_doc = f"""
@@ -124,6 +266,8 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
   {_render_action_section_pages('8', 'File Point + EA Families with Forms by Fund', 'Shows admin, forms each agent files, and whether each agent files each fund.', ['Fund Family', 'Fund', 'Admin(s)', 'QES Files?', 'QES Forms', 'EA Files?', 'EA Forms', 'File Point Files?', 'File Point Forms'], section_8_rows, rows_per_page=13)}
   {_render_action_section_pages('9', 'Summary Table by Admin (Filing Agent Distribution)', 'Filing distribution and share by admin across EA, QES, FilePoint, and Other.', ['Administrator', 'Total Filings', 'EA Count', 'QES Count', 'FilePoint Count', 'Other Count', 'EA %', 'QES %', 'FilePoint %', 'Other %'], section_9_rows, rows_per_page=20)}
   {_render_action_section_pages('10', 'Opportunity Table (EA Expansion / New / Defend)', 'Family-level opportunity flags, agent mix, and high-value filing indicators.', ['Administrator', 'Fund Family', 'EA Presence', 'Competitors Present', 'Agent Mix', 'Opportunity Type', '# Funds', '# High-Value Filings'], section_10_rows, rows_per_page=18)}
+  {_render_action_section_pages('11.1', 'Sales Person Relationship', 'Shows the relationship between sales person, admin, fund family, fund, and EA/QES/FilePoint opportunity context.', ['Sales Person', 'Administrator', 'Fund Family', 'Fund', 'EA', 'QES', 'FilePoint', 'Opportunity', 'Form Types'], section_11_relationship_rows, rows_per_page=16)}
+  {_render_action_section_pages('11.2', 'Sales Person Action List', 'Action list grouped by sales person and divided into Expansion, Defend, and New based on current admin/family relationships.', ['Sales Person', 'Action Group', 'Administrator', 'Fund Family', 'Fund', 'Reason', 'Form Types'], section_11_action_rows, rows_per_page=16)}
 </body>
 </html>
 """
@@ -142,6 +286,8 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
         {"section": "section_8_file_point_ea_fund_forms", "row_count": len(section_8_rows)},
         {"section": "section_9_admin_distribution", "row_count": len(section_9_rows)},
         {"section": "section_10_opportunity", "row_count": len(section_10_rows)},
+        {"section": "section_11_1_sales_relationship", "row_count": len(section_11_relationship_rows)},
+        {"section": "section_11_2_sales_action_list", "row_count": len(section_11_action_rows)},
     ]
     return {
         "summary": summary_rows,
@@ -149,6 +295,8 @@ def render_report(rows: list[dict[str, Any]], output_pdf: Path) -> dict[str, lis
         "opportunity": section_11["opportunity"],
         "pivot_admin_agent": section_11["pivot_admin_agent"],
         "pivot_admin_form_agent": section_11["pivot_admin_form_agent"],
+        "sales_relationship": section_sales["relationship"],
+        "sales_actions": section_sales["actions"],
     }
 
 
@@ -169,7 +317,8 @@ def main() -> None:
         raise SystemExit("BigQuery project is empty. Set --project-id, BQ_PROJECT_ID, or GOOGLE_CLOUD_PROJECT.")
 
     rows = query_rows(project_id=project_id)
-    sections = render_report(rows, Path(args.output))
+    sales_rows = query_sales_rows(project_id=project_id)
+    sections = render_report(rows, sales_rows, Path(args.output))
 
     output_base = Path(args.output).with_suffix("")
     write_csv(sections["summary"], output_base.with_suffix(".csv"))
@@ -177,6 +326,8 @@ def main() -> None:
     write_csv(sections["opportunity"], output_base.with_name(output_base.name + "_opportunity.csv"))
     write_csv(sections["pivot_admin_agent"], output_base.with_name(output_base.name + "_pivot_admin_agent.csv"))
     write_csv(sections["pivot_admin_form_agent"], output_base.with_name(output_base.name + "_pivot_admin_form_agent.csv"))
+    write_csv(sections["sales_relationship"], output_base.with_name(output_base.name + "_sales_relationship.csv"))
+    write_csv(sections["sales_actions"], output_base.with_name(output_base.name + "_sales_actions.csv"))
 
 
 if __name__ == "__main__":
