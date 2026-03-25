@@ -83,7 +83,8 @@ def render_pdf(rows: list[dict[str, Any]], output_pdf: Path) -> None:
     <p><b>Form Type:</b> {html.escape(_display(r.get('formType')))}</p>
     <p><b>Accession #:</b> {html.escape(_display(r.get('accessionNumber')))}</p>
     <p><b>Filing Agent Group:</b> {html.escape(_display(r.get('filing_agent_group')))}</p>
-    <p><b>Agent Category:</b> {html.escape(_display(r.get('agent_category_refined')))}</p>
+    <p><b>Agent Category:</b> {html.escape(_display(r.get('agent_category')))}</p>
+    <p><b>Agent Category Refined:</b> {html.escape(_display(r.get('agent_category_refined')))}</p>
     <p><b>Is Filing Agent:</b> {html.escape(_display(r.get('is_filing_agent')))}</p>
     <p><b>Is Self Filer:</b> {html.escape(_display(r.get('is_self_filer')))}</p>
     <p><b>NCEN Registrant Name:</b> {html.escape(_display(r.get('ncen_registrant_name')))}</p>
@@ -92,16 +93,10 @@ def render_pdf(rows: list[dict[str, Any]], output_pdf: Path) -> None:
     <p><b>Investment Type:</b> {html.escape(_display(r.get('ncen_investment_company_type')))}</p>
     <p><b>Total Series:</b> {html.escape(_display(r.get('ncen_total_series')))}</p>
     <p><b>Accession Rows:</b> {html.escape(_display(r.get('ncen_accession_rows')))}</p>
-    <p><b>Total Filings (Window):</b> {html.escape(_display(r.get('total_filings_in_window')))}</p>
-    <p><b>Total Agent Groups (Window):</b> {html.escape(_display(r.get('total_agent_groups_used_in_window')))}</p>
-    <p><b>Other Agent Group Count (Window):</b> {html.escape(_display(r.get('other_agent_groups_used_in_window_count')))}</p>
-    <p><b>Uses Other Filing Agents:</b> {html.escape(_display(r.get('uses_other_filing_agents_in_window')))}</p>
   </div>
   <p><b>Admin Names:</b> {html.escape(_display(r.get('ncen_admin_names')))}</p>
   <p><b>Adviser Names:</b> {html.escape(_display(r.get('ncen_adviser_names')))}</p>
   <p><b>Adviser Types:</b> {html.escape(_display(r.get('ncen_adviser_types')))}</p>
-  <p><b>All Agent Groups:</b> {html.escape(_display(r.get('all_agent_groups_used_in_window')))}</p>
-  <p><b>Other Agent Groups:</b> {html.escape(_display(r.get('other_agent_groups_used_in_window')))}</p>
 </div>
 """
         )

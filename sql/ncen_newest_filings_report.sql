@@ -8,7 +8,10 @@ SELECT
   CAST(companyCik AS STRING) AS companyCik,
   formType,
   accessionNumber,
+  filingTxtUrl,
+  filingIndexUrl,
   filing_agent_group,
+  agent_category,
   agent_category_refined,
   is_filing_agent,
   is_self_filer,
@@ -20,13 +23,7 @@ SELECT
   ncen_accession_rows,
   ncen_admin_names,
   ncen_adviser_names,
-  ncen_adviser_types,
-  total_filings_in_window,
-  total_agent_groups_used_in_window,
-  all_agent_groups_used_in_window,
-  other_agent_groups_used_in_window_count,
-  other_agent_groups_used_in_window,
-  uses_other_filing_agents_in_window
+  ncen_adviser_types
 FROM `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
 WHERE filingDate IS NOT NULL
 ORDER BY filingDate DESC, indexDate DESC, load_ts DESC

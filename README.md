@@ -194,7 +194,7 @@ Source:
 
 What it does:
 - pulls the 10 newest filings ordered by `filingDate`, `indexDate`, `load_ts` descending
-- includes prevalent fields for filing identity, agent context, NCEN family/admin/adviser context, and window activity metrics
+- includes prevalent fields for filing identity, URLs, agent context, and NCEN family/admin/adviser context
 - outputs a readable PDF card per filing and a flat CSV export
 
 Files:
