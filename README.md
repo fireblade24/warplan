@@ -216,3 +216,38 @@ python src/ncen_newest_filings_report.py \
 Outputs:
 - `output/ncen_newest_filings_report.pdf`
 - `output/ncen_newest_filings_report.csv`
+
+## NCEN Sales Reassignment Report (new)
+
+Report for reassigning accounts from a departing salesperson (default: `Mary Catherine`) using NCEN-derived relationship and filing signals plus current salesperson book context.
+
+Source data:
+- NCEN enrichment: `sec-edgar-ralph.warplan.v_fact_filing_enriched_with_ncen_roles`
+- Salesperson account table (you provide via `--sales-table`) with required columns:
+  - `salesperson_name`
+  - `companyCik`
+  - `companyName`
+
+What it does:
+- reads all clients for all salespeople from your sales table (no family-only restriction)
+- enriches each client with NCEN family/admin/adviser/adviser-type + filing velocity + form mix
+- isolates departing salesperson accounts and ranks best-fit destination rep for each account
+- includes confidence band for each decision (`High`, `Medium`, `Low`) and the weighted-factor reasoning values
+
+Files:
+- SQL enrichment: `sql/ncen_sales_reassignment_enrichment.sql`
+- Runner: `src/ncen_sales_reassignment_report.py`
+
+Run:
+```bash
+python src/ncen_sales_reassignment_report.py \
+  --project-id <your-gcp-project> \
+  --sales-table <project.dataset.sales_accounts> \
+  --departing-salesperson "Mary Catherine"
+```
+
+Outputs (default prefix `output/ncen_sales_reassignment_report`):
+- `output/ncen_sales_reassignment_report.csv` (decision detail)
+- `output/ncen_sales_reassignment_report_book.csv` (new book assignments)
+- `output/ncen_sales_reassignment_report.md` (human-readable summary)
+- `output/ncen_sales_reassignment_report.pdf` (professional formatted report)
