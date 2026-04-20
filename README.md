@@ -250,3 +250,4 @@ Outputs (default prefix `output/ncen_sales_reassignment_report`):
 - `output/ncen_sales_reassignment_report.csv` (decision detail)
 - `output/ncen_sales_reassignment_report_book.csv` (new book assignments)
 - `output/ncen_sales_reassignment_report.md` (human-readable summary)
+- `output/ncen_sales_reassignment_report.pdf` (professional formatted report)

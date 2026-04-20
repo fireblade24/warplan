@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
 import json
 import os
 import re
@@ -246,6 +247,151 @@ def write_markdown_report(decisions: list[dict[str, Any]], output_md: Path, depa
     output_md.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def render_pdf_report(decisions: list[dict[str, Any]], output_pdf: Path, departing_salesperson: str) -> None:
+    from weasyprint import HTML
+
+    output_pdf.parent.mkdir(parents=True, exist_ok=True)
+    if not decisions:
+        html_doc = f"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page {{ size: Letter portrait; margin: 0.5in; }}
+    body {{ font-family: Arial, sans-serif; color: #111827; font-size: 11px; }}
+    h1 {{ color: #0f3d63; margin-bottom: 4px; }}
+    .empty {{ margin-top: 18px; font-size: 12px; color: #374151; }}
+  </style>
+</head>
+<body>
+  <h1>NCEN Sales Reassignment Report</h1>
+  <p><b>Departing Salesperson:</b> {html.escape(departing_salesperson)}</p>
+  <p class="empty">No reassignment decisions were generated.</p>
+</body>
+</html>
+"""
+        HTML(string=html_doc).write_pdf(str(output_pdf))
+        return
+
+    decision_rows = []
+    for index, d in enumerate(decisions, start=1):
+        decision_rows.append(
+            f"""
+<tr>
+  <td>{index}</td>
+  <td>{html.escape(d['company_name'])}</td>
+  <td>{html.escape(d['company_cik'])}</td>
+  <td>{html.escape(d['recommended_salesperson'])}</td>
+  <td>{d['score']:.4f}</td>
+  <td>{html.escape(d['confidence_band'])}</td>
+  <td>{html.escape(d['confidence_range'])}</td>
+  <td>{html.escape(str(d['filings_in_window']))}</td>
+  <td>{html.escape(str(d['filing_days']))}</td>
+  <td>{html.escape(d['last_filing_date'])}</td>
+</tr>
+<tr class="reasoning-row">
+  <td colspan="10"><b>Reasoning:</b> {html.escape(d['reasoning'])}</td>
+</tr>
+"""
+        )
+
+    confidence_counts: dict[str, int] = defaultdict(int)
+    for d in decisions:
+        confidence_counts[d["confidence_band"]] += 1
+
+    summary_bits = [
+        f"Total accounts reassigned: <b>{len(decisions)}</b>",
+        f"High confidence: <b>{confidence_counts['High']}</b>",
+        f"Medium confidence: <b>{confidence_counts['Medium']}</b>",
+        f"Low confidence: <b>{confidence_counts['Low']}</b>",
+    ]
+
+    html_doc = f"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page {{ size: Letter landscape; margin: 0.45in; }}
+    body {{ font-family: Arial, sans-serif; color: #111827; font-size: 10px; }}
+    h1 {{ color: #0f3d63; margin: 0 0 4px 0; font-size: 20px; }}
+    .subhead {{ margin: 0 0 8px 0; color: #1f2937; }}
+    .summary {{
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin: 8px 0 12px 0;
+      padding: 8px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      font-size: 10px;
+    }}
+    table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
+    thead th {{
+      background: #0f3d63;
+      color: white;
+      font-size: 9px;
+      padding: 6px 5px;
+      border: 1px solid #d1d5db;
+      text-align: left;
+    }}
+    td {{
+      border: 1px solid #e5e7eb;
+      padding: 5px;
+      vertical-align: top;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+    }}
+    tbody tr:nth-child(4n+1), tbody tr:nth-child(4n+2) {{ background: #f9fafb; }}
+    .reasoning-row td {{
+      background: #f3f4f6;
+      font-size: 9px;
+      color: #374151;
+      border-top: none;
+    }}
+    .method {{
+      margin: 0 0 10px 0;
+      padding-left: 16px;
+    }}
+    .method li {{ margin: 2px 0; }}
+  </style>
+</head>
+<body>
+  <h1>NCEN Sales Reassignment Report</h1>
+  <p class="subhead"><b>Departing Salesperson:</b> {html.escape(departing_salesperson)}</p>
+  <ul class="method">
+    <li>Analyzes all clients across all salespeople from the supplied sales table.</li>
+    <li>Uses NCEN relationship + filing signals (family/admin/adviser/adviser-type/form overlap).</li>
+    <li>Ranks recommended owners with weighted fit + load balancing and confidence bands.</li>
+  </ul>
+  <div class="summary">{' | '.join(summary_bits)}</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:3%;">#</th>
+        <th style="width:18%;">Company</th>
+        <th style="width:8%;">CIK</th>
+        <th style="width:12%;">Recommended Salesperson</th>
+        <th style="width:6%;">Score</th>
+        <th style="width:7%;">Confidence</th>
+        <th style="width:8%;">Range</th>
+        <th style="width:8%;">Filings (365d)</th>
+        <th style="width:8%;">Active Days</th>
+        <th style="width:12%;">Last Filing Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {''.join(decision_rows)}
+    </tbody>
+  </table>
+</body>
+</html>
+"""
+    HTML(string=html_doc).write_pdf(str(output_pdf))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build NCEN-informed reassignment recommendations for a departing salesperson.")
     parser.add_argument("--project-id", default=os.getenv("BQ_PROJECT_ID"), required=False)
@@ -254,7 +400,7 @@ def main() -> None:
     parser.add_argument(
         "--output-prefix",
         default=str(OUTPUT_DIR / "ncen_sales_reassignment_report"),
-        help="Output prefix used for .csv (detailed), _book.csv (new assignments), and .md",
+        help="Output prefix used for .csv (detailed), _book.csv (new assignments), .md, and .pdf",
     )
     args = parser.parse_args()
 
@@ -271,14 +417,17 @@ def main() -> None:
     decisions_csv = prefix.with_suffix(".csv")
     reassigned_csv = prefix.with_name(prefix.name + "_book").with_suffix(".csv")
     report_md = prefix.with_suffix(".md")
+    report_pdf = prefix.with_suffix(".pdf")
 
     write_csv(decisions, decisions_csv)
     write_csv(reassigned_book, reassigned_csv)
     write_markdown_report(decisions, report_md, args.departing_salesperson)
+    render_pdf_report(decisions, report_pdf, args.departing_salesperson)
 
     print(f"Created recommendations: {decisions_csv}")
     print(f"Created reassigned sales book: {reassigned_csv}")
     print(f"Created markdown report: {report_md}")
+    print(f"Created PDF report: {report_pdf}")
 
 
 if __name__ == "__main__":
