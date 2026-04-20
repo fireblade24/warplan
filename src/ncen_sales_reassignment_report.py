@@ -136,7 +136,7 @@ def _confidence(score: float) -> tuple[str, str]:
         return "High", "85-95%"
     if score >= 0.55:
         return "Medium", "65-84%"
-    return "Low", "50-64%"
+    return "Low", "0-64%"
 
 
 def build_reassignment(rows: list[dict[str, Any]], departing_salesperson: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
